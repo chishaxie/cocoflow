@@ -1,8 +1,11 @@
 cocoflow
 ========
 
-Concurrency Control Flow
-并发流程控制
+Concurrency Control Flow 并发流程控制
+
+A framework is based on coroutine and libuv, just using **start**, **await**, **all_of**, **any_of** four primitives to control flow.
+
+一个基于协程和libuv的框架，仅通过**start**、 **await**、 **all_of**、 **any_of**四个原语控制流程。
 
 ### To build:
 
@@ -38,3 +41,7 @@ Windows:
 
     cd vc\
 	run test.bat
+	
+### License
+
+(The LGPL License)
