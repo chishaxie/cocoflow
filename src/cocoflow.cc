@@ -434,7 +434,7 @@ all_of::~all_of()
 
 /***** any_of *****/
 
-any_of::any_of(event_task* targets[], uint32 num) : num(num)
+any_of::any_of(event_task* targets[], uint32 num) : num(num), completed_id(-1)
 {
 	CHECK(this->num != 0);
 	this->children = targets;
