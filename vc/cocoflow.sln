@@ -1,0 +1,110 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 10.00
+# Visual Studio 2008
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libccf", "libccf.vcproj", "{85BC0E9B-AAA8-4B2D-BDD9-B8C4537D76C0}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "benchmark_sleep", "benchmark_sleep.vcproj", "{54F266A1-AE0D-4A62-AC92-16F3129790AB}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "demo_http_server", "demo_http_server.vcproj", "{4CC4CC31-9D25-4173-BA60-EA5073951C83}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "benchmark_tcp", "benchmark_tcp.vcproj", "{4FA62088-15D0-43FC-95E9-250EC2A8A213}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "benchmark_udp", "benchmark_udp.vcproj", "{61901296-9FF2-459C-878E-09ABA4291D1E}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "benchmark_udp2", "benchmark_udp2.vcproj", "{B2CDC38F-F34B-4344-99A5-645303379560}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "demo_all_sort", "demo_all_sort.vcproj", "{ED1839DE-F1BA-455E-9F1E-6A3FAE887FEF}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "demo_any_sort", "demo_any_sort.vcproj", "{A11E719A-27A8-425B-BF32-472F9581FB6D}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_primitive", "test_primitive.vcproj", "{C4B1B572-D742-42E7-A13A-AECA73C0A21D}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_sleep", "test_sleep.vcproj", "{6F67B98D-DFEB-4488-B5C0-2CABEAFEF5F2}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_tcp", "test_tcp.vcproj", "{5A748475-A6AE-48CE-812A-5815C2241652}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_tcp2", "test_tcp2.vcproj", "{80D5EF66-BE20-4E35-850D-6B990253560A}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_tcp3", "test_tcp3.vcproj", "{91500BB3-E3B0-4839-B83E-E091337EC4D4}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_udp", "test_udp.vcproj", "{15F568E0-A7A7-4EB7-AD17-C9453FFB2249}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_udp2", "test_udp2.vcproj", "{F2A1B198-8650-495C-A14B-2EE14AA2BFA5}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_udp3", "test_udp3.vcproj", "{72EF9DA8-4DF4-46A3-B228-F89D97B4E416}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{85BC0E9B-AAA8-4B2D-BDD9-B8C4537D76C0}.Debug|Win32.ActiveCfg = Debug|Win32
+		{85BC0E9B-AAA8-4B2D-BDD9-B8C4537D76C0}.Debug|Win32.Build.0 = Debug|Win32
+		{85BC0E9B-AAA8-4B2D-BDD9-B8C4537D76C0}.Release|Win32.ActiveCfg = Release|Win32
+		{85BC0E9B-AAA8-4B2D-BDD9-B8C4537D76C0}.Release|Win32.Build.0 = Release|Win32
+		{54F266A1-AE0D-4A62-AC92-16F3129790AB}.Debug|Win32.ActiveCfg = Debug|Win32
+		{54F266A1-AE0D-4A62-AC92-16F3129790AB}.Debug|Win32.Build.0 = Debug|Win32
+		{54F266A1-AE0D-4A62-AC92-16F3129790AB}.Release|Win32.ActiveCfg = Release|Win32
+		{54F266A1-AE0D-4A62-AC92-16F3129790AB}.Release|Win32.Build.0 = Release|Win32
+		{4CC4CC31-9D25-4173-BA60-EA5073951C83}.Debug|Win32.ActiveCfg = Debug|Win32
+		{4CC4CC31-9D25-4173-BA60-EA5073951C83}.Debug|Win32.Build.0 = Debug|Win32
+		{4CC4CC31-9D25-4173-BA60-EA5073951C83}.Release|Win32.ActiveCfg = Release|Win32
+		{4CC4CC31-9D25-4173-BA60-EA5073951C83}.Release|Win32.Build.0 = Release|Win32
+		{4FA62088-15D0-43FC-95E9-250EC2A8A213}.Debug|Win32.ActiveCfg = Debug|Win32
+		{4FA62088-15D0-43FC-95E9-250EC2A8A213}.Debug|Win32.Build.0 = Debug|Win32
+		{4FA62088-15D0-43FC-95E9-250EC2A8A213}.Release|Win32.ActiveCfg = Release|Win32
+		{4FA62088-15D0-43FC-95E9-250EC2A8A213}.Release|Win32.Build.0 = Release|Win32
+		{61901296-9FF2-459C-878E-09ABA4291D1E}.Debug|Win32.ActiveCfg = Debug|Win32
+		{61901296-9FF2-459C-878E-09ABA4291D1E}.Debug|Win32.Build.0 = Debug|Win32
+		{61901296-9FF2-459C-878E-09ABA4291D1E}.Release|Win32.ActiveCfg = Release|Win32
+		{61901296-9FF2-459C-878E-09ABA4291D1E}.Release|Win32.Build.0 = Release|Win32
+		{B2CDC38F-F34B-4344-99A5-645303379560}.Debug|Win32.ActiveCfg = Debug|Win32
+		{B2CDC38F-F34B-4344-99A5-645303379560}.Debug|Win32.Build.0 = Debug|Win32
+		{B2CDC38F-F34B-4344-99A5-645303379560}.Release|Win32.ActiveCfg = Release|Win32
+		{B2CDC38F-F34B-4344-99A5-645303379560}.Release|Win32.Build.0 = Release|Win32
+		{ED1839DE-F1BA-455E-9F1E-6A3FAE887FEF}.Debug|Win32.ActiveCfg = Debug|Win32
+		{ED1839DE-F1BA-455E-9F1E-6A3FAE887FEF}.Debug|Win32.Build.0 = Debug|Win32
+		{ED1839DE-F1BA-455E-9F1E-6A3FAE887FEF}.Release|Win32.ActiveCfg = Release|Win32
+		{ED1839DE-F1BA-455E-9F1E-6A3FAE887FEF}.Release|Win32.Build.0 = Release|Win32
+		{A11E719A-27A8-425B-BF32-472F9581FB6D}.Debug|Win32.ActiveCfg = Debug|Win32
+		{A11E719A-27A8-425B-BF32-472F9581FB6D}.Debug|Win32.Build.0 = Debug|Win32
+		{A11E719A-27A8-425B-BF32-472F9581FB6D}.Release|Win32.ActiveCfg = Release|Win32
+		{A11E719A-27A8-425B-BF32-472F9581FB6D}.Release|Win32.Build.0 = Release|Win32
+		{C4B1B572-D742-42E7-A13A-AECA73C0A21D}.Debug|Win32.ActiveCfg = Debug|Win32
+		{C4B1B572-D742-42E7-A13A-AECA73C0A21D}.Debug|Win32.Build.0 = Debug|Win32
+		{C4B1B572-D742-42E7-A13A-AECA73C0A21D}.Release|Win32.ActiveCfg = Release|Win32
+		{C4B1B572-D742-42E7-A13A-AECA73C0A21D}.Release|Win32.Build.0 = Release|Win32
+		{6F67B98D-DFEB-4488-B5C0-2CABEAFEF5F2}.Debug|Win32.ActiveCfg = Debug|Win32
+		{6F67B98D-DFEB-4488-B5C0-2CABEAFEF5F2}.Debug|Win32.Build.0 = Debug|Win32
+		{6F67B98D-DFEB-4488-B5C0-2CABEAFEF5F2}.Release|Win32.ActiveCfg = Release|Win32
+		{6F67B98D-DFEB-4488-B5C0-2CABEAFEF5F2}.Release|Win32.Build.0 = Release|Win32
+		{5A748475-A6AE-48CE-812A-5815C2241652}.Debug|Win32.ActiveCfg = Debug|Win32
+		{5A748475-A6AE-48CE-812A-5815C2241652}.Debug|Win32.Build.0 = Debug|Win32
+		{5A748475-A6AE-48CE-812A-5815C2241652}.Release|Win32.ActiveCfg = Release|Win32
+		{5A748475-A6AE-48CE-812A-5815C2241652}.Release|Win32.Build.0 = Release|Win32
+		{80D5EF66-BE20-4E35-850D-6B990253560A}.Debug|Win32.ActiveCfg = Debug|Win32
+		{80D5EF66-BE20-4E35-850D-6B990253560A}.Debug|Win32.Build.0 = Debug|Win32
+		{80D5EF66-BE20-4E35-850D-6B990253560A}.Release|Win32.ActiveCfg = Release|Win32
+		{80D5EF66-BE20-4E35-850D-6B990253560A}.Release|Win32.Build.0 = Release|Win32
+		{91500BB3-E3B0-4839-B83E-E091337EC4D4}.Debug|Win32.ActiveCfg = Debug|Win32
+		{91500BB3-E3B0-4839-B83E-E091337EC4D4}.Debug|Win32.Build.0 = Debug|Win32
+		{91500BB3-E3B0-4839-B83E-E091337EC4D4}.Release|Win32.ActiveCfg = Release|Win32
+		{91500BB3-E3B0-4839-B83E-E091337EC4D4}.Release|Win32.Build.0 = Release|Win32
+		{15F568E0-A7A7-4EB7-AD17-C9453FFB2249}.Debug|Win32.ActiveCfg = Debug|Win32
+		{15F568E0-A7A7-4EB7-AD17-C9453FFB2249}.Debug|Win32.Build.0 = Debug|Win32
+		{15F568E0-A7A7-4EB7-AD17-C9453FFB2249}.Release|Win32.ActiveCfg = Release|Win32
+		{15F568E0-A7A7-4EB7-AD17-C9453FFB2249}.Release|Win32.Build.0 = Release|Win32
+		{F2A1B198-8650-495C-A14B-2EE14AA2BFA5}.Debug|Win32.ActiveCfg = Debug|Win32
+		{F2A1B198-8650-495C-A14B-2EE14AA2BFA5}.Debug|Win32.Build.0 = Debug|Win32
+		{F2A1B198-8650-495C-A14B-2EE14AA2BFA5}.Release|Win32.ActiveCfg = Release|Win32
+		{F2A1B198-8650-495C-A14B-2EE14AA2BFA5}.Release|Win32.Build.0 = Release|Win32
+		{72EF9DA8-4DF4-46A3-B228-F89D97B4E416}.Debug|Win32.ActiveCfg = Debug|Win32
+		{72EF9DA8-4DF4-46A3-B228-F89D97B4E416}.Debug|Win32.Build.0 = Debug|Win32
+		{72EF9DA8-4DF4-46A3-B228-F89D97B4E416}.Release|Win32.ActiveCfg = Release|Win32
+		{72EF9DA8-4DF4-46A3-B228-F89D97B4E416}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
