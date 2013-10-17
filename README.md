@@ -5,6 +5,8 @@ A framework is based on coroutine and libuv, just using **start**, **await**, **
 
 一个基于协程和libuv的框架，仅通过 **start**、 **await**、 **all_of**、 **any_of** 控制流程。
 
+### Documents: [wiki](https://github.com/chishaxie/cocoflow/wiki/%E4%B8%BB%E9%A1%B5)
+
 ### To build:
 
 Prerequisites (Linux):
