@@ -5,6 +5,8 @@
 
 #include "cocoflow.h"
 
+#include "simple_rand.h"
+
 using namespace std;
 
 #define TEST_PORT	31005
@@ -19,7 +21,7 @@ do { \
 	} \
 } while(0)
 
-static clock_t bgn, cut, end;
+static clock_t time_bgn, time_cut, time_end;
 
 typedef ccf::task<15> test_task;
 
@@ -101,7 +103,7 @@ class seq_task: public test_task
 		char buf[1024];
 		ccf::uint32 *plen = (ccf::uint32 *)buf;
 		ccf::uint32 *pseq = ((ccf::uint32 *)buf) + 1;
-		*plen = rand()%128 + 8;
+		*plen = simple_rand()%128 + 8;
 		*pseq = this->seq;
 		ccf::tcp::send ts(ret, seq_task::tc, buf, *plen);
 		await(ts);
@@ -112,10 +114,10 @@ class seq_task: public test_task
 		ASSERT(ret == ccf::tcp::success);
 		if (++seq_task::times == TEST_TIMES)
 		{
-			end = clock();
-			cout << "Init: " << (cut - bgn) << endl;
-			cout << "Proc: " << (end - cut) << endl;
-			cout << "Total: " << (end - bgn) << endl;
+			time_end = clock();
+			cout << "Init: " << (time_cut - time_bgn) << endl;
+			cout << "Proc: " << (time_end - time_cut) << endl;
+			cout << "Total: " << (time_end - time_bgn) << endl;
 			exit(0);
 		}
 	}
@@ -151,13 +153,13 @@ class main_task: public test_task
 
 int main()
 {	
-	bgn = clock();
+	time_bgn = clock();
 	
 	ccf::event_task::init(100);
 	test_task::init(11000);
 	main_task tMain;
 	
-	cut = clock();
+	time_cut = clock();
 	
 	ccf::cocoflow(tMain);
 	

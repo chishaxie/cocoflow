@@ -4,6 +4,8 @@
 
 #include "cocoflow.h"
 
+#include "simple_rand.h"
+
 using namespace std;
 
 #define TEST_PORT	30917
@@ -27,7 +29,7 @@ class echo_task: public ccf::user_task
 		char buf[65536];
 		struct sockaddr_in peer;
 		size_t len = sizeof(buf);
-		ccf::uint64 t = rand()%10000;
+		ccf::uint64 t = simple_rand()%10000;
 		ccf::udp::recv ur(echo_task::u, (struct sockaddr *)&peer, buf, len);
 		await(ur);
 		if (++echo_task::times < TEST_TIMES)
@@ -70,7 +72,7 @@ class seq_task: public ccf::user_task
 		char buf[65536];
 		ccf::uint32 *pos = (ccf::uint32 *)buf;
 		*pos = this->seq;
-		int add_len = rand()%100;
+		int add_len = simple_rand()%100;
 		ccf::udp::send us(seq_task::u, seq_task::target, buf, sizeof(ccf::uint32) + add_len);
 		await(us);
 		cout << "seq_task send " << sizeof(ccf::uint32) + add_len << ", seq = " << this->seq << endl;

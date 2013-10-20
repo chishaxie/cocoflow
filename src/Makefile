@@ -1,7 +1,7 @@
 C_ARGS = -g -Wall -O2
 CX = g++
 
-UV_VERSION=0.10.17
+UV_VERSION=0.10.18
 UV_BUILDTYPE=Release
 
 LIB = ../lib/libuv.a ../lib/libccf.a

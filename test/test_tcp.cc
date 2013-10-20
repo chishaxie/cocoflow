@@ -4,6 +4,8 @@
 
 #include "cocoflow.h"
 
+#include "simple_rand.h"
+
 using namespace std;
 
 #define TEST_PORT	31005
@@ -34,7 +36,7 @@ class recv_task: public ccf::user_task
 		for (;;)
 		{
 			char buf[64];
-			ccf::sleep s(rand()%5000);
+			ccf::sleep s(simple_rand()%5000);
 			await(s);
 			size_t len = sizeof(buf);
 			ccf::tcp::recv tr(ret, tc, buf, len);
@@ -60,7 +62,7 @@ class send_task: public ccf::user_task
 		for (int i=0; i<TEST_TIMES; i++)
 		{
 			char buf[64];
-			ccf::sleep s(rand()%2000);
+			ccf::sleep s(simple_rand()%2000);
 			await(s);
 			ccf::tcp::send ts(ret, tc, buf, TEST_LEN);
 			await(ts);

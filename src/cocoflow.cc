@@ -21,13 +21,10 @@ extern "C" {
 	} while(0)
 	#define LOG_DEBUG(fmt, args...) \
 	do { \
-		if (ccf_unlikely(debug_file)) \
-		{ \
-			uint32 ns = uv_hrtime()%1000000000; \
-			time_t s = time(NULL); \
-			struct tm date = *localtime(&s); \
-			fprintf(debug_file, "[%02u:%02u:%02u.%u] [DEBUG]: " fmt "\n", date.tm_hour, date.tm_min, date.tm_sec, ns, ##args); \
-		} \
+		uint32 ns = uv_hrtime()%1000000000; \
+		time_t s = time(NULL); \
+		struct tm date = *localtime(&s); \
+		fprintf(debug_file, "[%02u:%02u:%02u.%u] [DEBUG]: " fmt "\n", date.tm_hour, date.tm_min, date.tm_sec, ns, ##args); \
 	} while(0)
 #else
 	#pragma warning(disable:4996)
@@ -38,13 +35,10 @@ extern "C" {
 	} while(0)
 	#define LOG_DEBUG(fmt, ...) \
 	do { \
-		if (ccf_unlikely(debug_file)) \
-		{ \
-			uint32 ns = uv_hrtime()%1000000000; \
-			time_t s = time(NULL); \
-			struct tm date = *localtime(&s); \
-			fprintf(debug_file, "[%02u:%02u:%02u.%u] [DEBUG]: " fmt "\n", date.tm_hour, date.tm_min, date.tm_sec, ns, __VA_ARGS__); \
-		} \
+		uint32 ns = uv_hrtime()%1000000000; \
+		time_t s = time(NULL); \
+		struct tm date = *localtime(&s); \
+		fprintf(debug_file, "[%02u:%02u:%02u.%u] [DEBUG]: " fmt "\n", date.tm_hour, date.tm_min, date.tm_sec, ns, __VA_ARGS__); \
 	} while(0)
 #endif
 
@@ -152,12 +146,15 @@ static inline void swap_running(uint32 cur, uint32 next)
 	coroutine *cur_runing = (cur == EVENT_LOOP_ID) ? (&loop_running) : (global_running_manager + cur),
 			  *next_runing = (next == EVENT_LOOP_ID) ? (&loop_running) : (global_running_manager + next);
 	cur_task = (next == EVENT_LOOP_ID) ? (NULL) : (global_task_manager[next]);
-	if (cur == EVENT_LOOP_ID)
-		LOG_DEBUG("Task switch event_loop -> %u", next);
-	else if (next == EVENT_LOOP_ID)
-		LOG_DEBUG("Task switch %u -> event_loop", cur);
-	else
-		LOG_DEBUG("Task switch %u -> %u", cur, next);
+	if (ccf_unlikely(debug_file))
+	{
+		if (cur == EVENT_LOOP_ID)
+			LOG_DEBUG("Task switch event_loop -> %u", next);
+		else if (next == EVENT_LOOP_ID)
+			LOG_DEBUG("Task switch %u -> event_loop", cur);
+		else
+			LOG_DEBUG("Task switch %u -> %u", cur, next);
+	}
 	coroutine_switch(cur_runing, next_runing, cur, next);
 	cur_task = (cur == EVENT_LOOP_ID) ? (NULL) : (global_task_manager[cur]);
 }
@@ -375,6 +372,9 @@ int __start(event_task* target)
 
 void __cocoflow(event_task* top)
 {
+	static int call = 0;
+	CHECK((++call) == 1);
+	
 	top_task = top;
 	
 	top_task->block_to = EVENT_LOOP_ID;

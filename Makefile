@@ -14,12 +14,15 @@ $(DEMO): demo/*.cc
 $(TEST): test/*.cc
 	make -C test
 
-.PHONY: clean del
+.PHONY: clean test del
 
 clean:
 	make -C src clean
 	make -C demo clean
 	make -C test clean
+	
+test: $(TEST)
+	make -C test all_test
 	
 del: $(LIB)
 	cp lib/libuv.a libuv.a

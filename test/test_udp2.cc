@@ -4,6 +4,8 @@
 
 #include "cocoflow.h"
 
+#include "simple_rand.h"
+
 using namespace std;
 
 #define TEST_PORT	30917
@@ -29,7 +31,7 @@ class echo_task: public ccf::user_task
 		for (int i=0; i<TEST_TIMES; i++)
 		{
 			size_t len = sizeof(buf);
-			ccf::uint64 t = rand()%2000;
+			ccf::uint64 t = simple_rand()%2000;
 			ccf::udp::recv ur(u, (struct sockaddr *)&peer, buf, len);
 			await(ur);
 			cout << "echo_task recv " << len << endl;

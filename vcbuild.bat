@@ -2,13 +2,15 @@
 
 cd %~dp0
 
+set UV_VERSION=0.10.18
+
 if exist lib\Release\libuv.lib goto check_msvc
 
 echo Compiling libuv ...
 cd deps
 unzip gyp.zip > nul
-unzip libuv-0.10.17.zip > nul
-cd libuv-0.10.17\
+unzip libuv-%UV_VERSION%.zip > nul
+cd libuv-%UV_VERSION%\
 md build
 md build\gyp
 xcopy /E ..\gyp build\gyp > nul
@@ -17,11 +19,11 @@ call vcbuild release
 
 cd %~dp0
 md src\uv
-xcopy /E deps\libuv-0.10.17\include src\uv > nul
+xcopy /E deps\libuv-%UV_VERSION%\include src\uv > nul
 md lib\Debug
 md lib\Release
-xcopy deps\libuv-0.10.17\Debug\lib\libuv.lib lib\Debug\ > nul
-xcopy deps\libuv-0.10.17\Release\lib\libuv.lib lib\Release\ > nul
+xcopy deps\libuv-%UV_VERSION%\Debug\lib\libuv.lib lib\Debug\ > nul
+xcopy deps\libuv-%UV_VERSION%\Release\lib\libuv.lib lib\Release\ > nul
 
 :check_msvc
 @rem Look for Visual Studio 2012

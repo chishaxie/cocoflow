@@ -34,13 +34,11 @@ Windows:
 
 Linux:
 
-    cd test/
-	make all_test
+    make test
 	
 Windows:
 
-    cd vc\
-	run test.bat
+	run vc\test.bat
 	
 ### License
 

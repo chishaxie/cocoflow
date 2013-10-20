@@ -19,7 +19,7 @@ do { \
 	} \
 } while(0)
 
-static clock_t bgn, cut, end;
+static clock_t time_bgn, time_cut, time_end;
 
 typedef ccf::task<15> test_task;
 
@@ -50,21 +50,21 @@ class main_task: public test_task
 
 int main()
 {	
-	bgn = clock();
+	time_bgn = clock();
 	
 	ccf::event_task::init(100);
 	test_task::init(1100);
 	main_task tMain;
 	
-	cut = clock();
+	time_cut = clock();
 	
 	ccf::cocoflow(tMain);
 	
-	end = clock();
+	time_end = clock();
 	
-	cout << "Init: " << (cut - bgn) << endl;
-	cout << "Proc: " << (end - cut) << endl;
-	cout << "Total: " << (end - bgn) << endl;
+	cout << "Init: " << (time_cut - time_bgn) << endl;
+	cout << "Proc: " << (time_end - time_cut) << endl;
+	cout << "Total: " << (time_end - time_bgn) << endl;
 	
 	return 0;
 }
