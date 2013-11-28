@@ -10,11 +10,26 @@ INC_ARGS = -I../include
 
 all: $(LIB)
 
-../lib/libccf.a: cocoflow.o
+../lib/libccf.a: cocoflow.o sleep.o sync.o udp.o tcp.o tools.o
 	ar cr $@ $^
 
-cocoflow.o: cocoflow.cc ../include/cocoflow.h uv/uv.h
+cocoflow.o: cocoflow.cc cocoflow-comm.h ../include/cocoflow.h uv/uv.h
 	$(CX) $(C_ARGS) -fPIC -c -o $@ cocoflow.cc $(INC_ARGS)
+	
+sleep.o: sleep.cc cocoflow-comm.h ../include/cocoflow.h uv/uv.h
+	$(CX) $(C_ARGS) -fPIC -c -o $@ sleep.cc $(INC_ARGS)
+	
+sync.o: sync.cc cocoflow-comm.h ../include/cocoflow.h uv/uv.h
+	$(CX) $(C_ARGS) -fPIC -c -o $@ sync.cc $(INC_ARGS)
+	
+udp.o: udp.cc cocoflow-comm.h ../include/cocoflow.h uv/uv.h
+	$(CX) $(C_ARGS) -fPIC -c -o $@ udp.cc $(INC_ARGS)
+	
+tcp.o: tcp.cc cocoflow-comm.h ../include/cocoflow.h uv/uv.h
+	$(CX) $(C_ARGS) -fPIC -c -o $@ tcp.cc $(INC_ARGS)
+	
+tools.o: tools.cc cocoflow-comm.h ../include/cocoflow.h uv/uv.h
+	$(CX) $(C_ARGS) -fPIC -c -o $@ tools.cc $(INC_ARGS)
 
 uv/uv.h: ../deps/libuv.a
 	@mkdir uv; cp -r ../deps/libuv-$(UV_VERSION)/include/* uv/

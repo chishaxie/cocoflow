@@ -153,6 +153,26 @@
 				RelativePath="..\src\cocoflow.cc"
 				>
 			</File>
+			<File
+				RelativePath="..\src\sleep.cc"
+				>
+			</File>
+			<File
+				RelativePath="..\src\sync.cc"
+				>
+			</File>
+			<File
+				RelativePath="..\src\udp.cc"
+				>
+			</File>
+			<File
+				RelativePath="..\src\tcp.cc"
+				>
+			</File>
+			<File
+				RelativePath="..\src\tools.cc"
+				>
+			</File>
 		</Filter>
 		<Filter
 			Name="Header Files"
