@@ -2,7 +2,7 @@
 
 cd %~dp0
 
-set UV_VERSION=0.10.18
+set UV_VERSION=0.10.19
 
 if exist lib\Release\libuv.lib goto check_msvc
 
