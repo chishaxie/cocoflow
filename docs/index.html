@@ -1,0 +1,625 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta http-equiv="Content-Style-Type" content="text/css" />
+  <meta name="generator" content="pandoc" />
+  <title></title>
+  <style type="text/css">code{white-space: pre;}</style>
+  <link rel="stylesheet" href="buttondown.css" type="text/css" />
+</head>
+<body>
+<ol style="list-style-type: decimal">
+<li><a href="#%E5%9F%BA%E6%9C%AC%E6%A6%82%E5%BF%B5">基本概念</a></li>
+<li><a href="#cocoflow">cocoflow</a></li>
+<li><a href="#%E4%BB%BB%E5%8A%A1">任务</a></li>
+<li><a href="#%E5%8E%9F%E8%AF%AD">原语</a></li>
+<li><a href="#%E6%A0%B8%E5%BF%83api">核心API</a></li>
+<li><a href="#task-%E4%BB%BB%E5%8A%A1%E5%9F%BA%E7%B1%BB">task 任务基类</a></li>
+<li><a href="#cocoflow-%E6%A1%86%E6%9E%B6%E5%85%A5%E5%8F%A3%E5%87%BD%E6%95%B0">cocoflow 框架入口函数</a></li>
+<li><a href="#start-%E5%8E%9F%E8%AF%AD">start 原语</a></li>
+<li><a href="#await-%E5%8E%9F%E8%AF%AD">await 原语</a></li>
+<li><a href="#all_of-%E5%8E%9F%E8%AF%AD">all_of 原语</a></li>
+<li><a href="#any_of-%E5%8E%9F%E8%AF%AD">any_of 原语</a></li>
+<li><a href="#%E4%BA%8B%E4%BB%B6api">事件API</a></li>
+<li><a href="#sleep-%E4%BC%91%E6%81%AF">sleep 休息</a></li>
+<li><a href="#sync-%E5%90%8C%E6%AD%A5%E7%B1%BB%E4%BC%BC%E4%BF%A1%E5%8F%B7">sync 同步(类似信号)</a></li>
+<li><a href="#%E7%BD%91%E7%BB%9C%E4%BA%8B%E4%BB%B6%E7%9B%B8%E5%85%B3%E5%9B%9E%E8%B0%83%E5%87%BD%E6%95%B0">网络事件相关回调函数</a></li>
+<li><a href="#udp">udp</a></li>
+<li><a href="#tcp">tcp</a></li>
+<li><a href="#%E5%B7%A5%E5%85%B7api">工具API</a></li>
+<li><a href="#%E5%8F%96%E6%B6%88%E6%A8%A1%E5%9E%8B">取消模型</a></li>
+</ol>
+<h1 id="基本概念">1. 基本概念</h1>
+<h2 id="cocoflow">1.1. cocoflow</h2>
+<ul>
+<li>Concurrency Control Flow 并发流程控制</li>
+<li>基于 协程(Coroutine) &amp; libuv 的<strong>C++</strong>开发框架</li>
+<li>使用 <strong>start</strong> | <strong>await</strong> | <strong>all_of</strong> | <strong>any_of</strong> 四个原语控制流程</li>
+<li>同步的用户接口 &amp; 异步的运行过程</li>
+<li>阻塞只是hold住运行状态然后切换</li>
+<li>任何操作都不会真正阻塞线程</li>
+<li>支持 Linux &amp; Windows</li>
+<li>提供 sleep sync udp tcp 等预设任务</li>
+</ul>
+<h2 id="任务">1.2. 任务</h2>
+<ul>
+<li>并发流程中最小的控制单元</li>
+<li>一段逻辑上可能阻塞的过程视为任务</li>
+</ul>
+<h2 id="原语">1.3. 原语</h2>
+<h3 id="start">start</h3>
+<ul>
+<li>异步地执行一个<任务>,该过程不阻塞当前任务的执行,目标任务启动后立即继续</li>
+</ul>
+<h3 id="await">await</h3>
+<ul>
+<li>同步地执行一个<任务>,该过程会阻塞当前任务的执行,等待目标任务执行完成后继续</li>
+</ul>
+<h3 id="all_of">all_of</h3>
+<ul>
+<li>将多个<任务>组合为一个新的任务,全部任务执行完成后新的任务视为执行完成</li>
+</ul>
+<h3 id="any_of">any_of</h3>
+<ul>
+<li>将多个<任务>组合为一个新的任务,任一任务执行完成后新的任务视为执行完成,同时会取消掉其他未执行完成的任务</li>
+</ul>
+<h1 id="核心api">2. 核心API</h1>
+<ul>
+<li>以下全部内容均在<strong>ccf</strong>命名空间中</li>
+</ul>
+<h2 id="task-任务基类">2.1. task 任务基类</h2>
+<h3 id="section"></h3>
+<pre><code>template&lt;uint32 UserPages, uint32 ProtectPages = 1&gt; class task;</code></pre>
+<ul>
+<li>task是一个抽象类模板</li>
+<li>不同模板参数的task数据结构一致，模板参数仅指定其内存大小 (指针可以在特化对象中相互转换)</li>
+<li>两个模板参数分别为<strong>用户页数</strong>和<strong>保护页数</strong> (每页为4KB)</li>
+<li><strong>用户页数</strong> * 4KB 为该task的栈内存，保护页会被置为禁止访问 (task栈的越界保护)</li>
+<li>每个task都有自己独立的栈内存</li>
+<li>Windows由于采用纤程Fiber机制实现,其无保护区,且最小栈内存64KB,且最小栈地址空间1MB(若栈使用超过64KB则会继续分配,直到地址空间冲突无法完成分配),因此在32位程序下最大任务数受地址空间限制(4096个就使用了4GB的地址空间了,32位程序上限)</li>
+<li>全部任务都需要继承它</li>
+</ul>
+<h3 id="section-1"></h3>
+<pre><code>typedef task&lt;4&gt; event_task;
+typedef task&lt;63&gt; user_task;</code></pre>
+<ul>
+<li>event_task为事件task，全部预设任务均继承它(栈内存仅16KB+4KB的保护区)</li>
+<li>user_task为用户task，若无特殊需求用户实现的任务可继承它(栈内存252KB+4KB的保护区)</li>
+</ul>
+<h3 id="section-2"></h3>
+<pre><code>enum task_status {
+    ready,
+    running,
+    completed,
+    canceled,
+    limited,
+    child_unready
+};</code></pre>
+<ul>
+<li><strong>ready</strong> 已就绪 (该task可以被执行)</li>
+<li><strong>running</strong> 运行中 (该task正在运行)</li>
+<li><strong>completed</strong> 运行完成 (该task已经成功运行)</li>
+<li><strong>canceled</strong> 被取消 (该task被取消了,在运行中中断)</li>
+<li><strong>limited</strong> 被限制 (该task在创建的时候内存已被耗尽,无法为其分配栈内存)</li>
+<li><strong>child_unready</strong> 子任务未就绪 (仅存在于all_of和any_of中,表示其子任务不全是就绪状态)</li>
+</ul>
+<h3 id="section-3"></h3>
+<pre><code>class task
+{
+public:
+    inline task();
+    virtual ~task();
+    inline task_status status() const;
+    inline uint32 unique_id() const;
+    inline void uninterruptable();
+    static void init(uint32 max_task_num);
+protected:
+    virtual void run() = 0;
+    virtual void cancel();
+};</code></pre>
+<ul>
+<li><code>inline task_status status() const;</code> 获取该任务的状态</li>
+<li><code>inline uint32 unique_id() const;</code> 获取该任务的全局唯一标识符</li>
+<li><code>inline void uninterruptable();</code> 将该任务设置为不可中断 (将不会被取消,详见any_of原语)</li>
+<li><code>virtual void run() = 0;</code> 子类实现,任务运行的核心逻辑 (请勿手动调用该函数)</li>
+<li><code>virtual void cancel();</code> 子类实现(task基类实现为空函数),任务取消的逻辑 (请勿手动调用该函数,详见any_of原语)</li>
+<li><code>static void init(uint32 max_task_num);</code> 全局任务初始化,设置某类型(模板特化)任务的最大个数</li>
+<li>所有task的栈内存会在初始化的时候被<strong>预先分配</strong>(内存池,提高性能),因此需要在创建任意task对象前使用该函数设置其最大任务数</li>
+<li>创建task对象时会使用预先分配的内存,摧毁时释放,循环利用,若当前对象数目已达设置的上限值,则新创建的会被置为<strong>limited</strong>状态</li>
+<li>不同特化参数的task需要设置独立的最大任务数,它们会使用独立的栈内存池,不会相互干扰</li>
+<li>若你使用了<code>task&lt;x, y&gt;</code>这一模板特化的数据类型，则需要使用<code>task&lt;x, y&gt;::init</code>函数设置该x和y值下的task最大数目</li>
+<li>任意特化的<code>task&lt;x, y&gt;::init函数</code>只能被调用一次</li>
+</ul>
+<h2 id="cocoflow-框架入口函数">2.2. cocoflow 框架入口函数</h2>
+<h3 id="section-4"></h3>
+<pre><code>template&lt;uint32 UserPages, uint32 ProtectPages&gt;
+void cocoflow(task&lt;UserPages, ProtectPages&gt;&amp; top);</code></pre>
+<ul>
+<li>函数参数为主任务的引用,函数会自动执行主任务的run()函数,主任务中产生的全部任务都退出时函数将会退出</li>
+<li>函数参数为任意特化的task类型的对象</li>
+<li>函数只能被调用一次</li>
+<li>函数会将当前线程切换为主任务的运行态</li>
+</ul>
+<h2 id="start-原语">2.3. start 原语</h2>
+<h3 id="section-5"></h3>
+<ul>
+<li>异步地执行一个<任务>,该过程不阻塞当前任务的执行,目标任务启动后立即继续</li>
+</ul>
+<h3 id="section-6"></h3>
+<pre><code>template&lt;uint32 UserPages, uint32 ProtectPages&gt;
+inline int start(task&lt;UserPages, ProtectPages&gt;* target);</code></pre>
+<ul>
+<li>函数只能在task的<strong>run()</strong>函数中调用</li>
+<li>函数参数为任意特化的task类型的指针(该指针必须是通过<strong>new运算符</strong>获得,且不用手工delete,其delete由start托管)</li>
+<li>目标task必须是<strong>ready</strong>状态,否则函数会直接delete对象并返回-1(正常时返回0)</li>
+<li>执行过程：</li>
+<li>将当前task运行态切换至目标task的运行态</li>
+<li>启动目标task</li>
+<li>若目标task遇到任意阻塞,则切换回当前task的运行态(目标task则和当前task脱离关系,当前task立即继续)</li>
+<li>若目标task直到执行完毕都无任意阻塞,则在其执行完毕后切换回当前task的运行态</li>
+</ul>
+<h2 id="await-原语">2.4. await 原语</h2>
+<h3 id="section-7"></h3>
+<ul>
+<li>同步地执行一个<任务>,该过程会阻塞当前任务的执行,等待目标任务执行完成后继续</li>
+</ul>
+<h3 id="section-8"></h3>
+<pre><code>template&lt;uint32 UserPages, uint32 ProtectPages&gt;
+inline int await(task&lt;UserPages, ProtectPages&gt;&amp; target);</code></pre>
+<ul>
+<li>函数只能在task的<strong>run()</strong>函数中调用</li>
+<li>函数参数为任意特化的task类型的引用</li>
+<li>函数运行时会立即回收目标task被分配的栈内存,并让目标task的继承当前task的栈内存(<strong>运行态继承复用</strong>)</li>
+<li>目标task必须是<strong>ready</strong>状态(由于不独占运行态因此<strong>limited</strong>状态也视为<strong>ready</strong>),否则函数直接返回-1(正常时返回0)</li>
+<li>执行过程:</li>
+<li>将目标task的运行态继承当前task的运行态(栈内存复用)</li>
+<li>启动目标task</li>
+<li>若目标task遇到任意阻塞,则释放(yield)当前task的运行态,并在适当的时候切换回来(任务完成时)</li>
+<li>在目标task执行完毕后取消目标task和当前task的运行态继承关系,再退出函数</li>
+</ul>
+<h2 id="all_of-原语">2.5. all_of 原语</h2>
+<h3 id="section-9"></h3>
+<ul>
+<li>将多个<任务>组合为一个新的任务,全部任务执行完成后新的任务视为执行完成</li>
+</ul>
+<h3 id="section-10"></h3>
+<pre><code>class all_of : public event_task
+{
+public: /* 2~6 argc */
+    template&lt;uint32 UP0, uint32 PP0, uint32 UP1, uint32 PP1&gt;
+    all_of(task&lt;UP0, PP0&gt;&amp; target0, task&lt;UP1, PP1&gt;&amp; target1);
+    /* 此处省略参数数目为3~6的函数原型 */
+    all_of(event_task* targets[], uint32 num);
+    virtual ~all_of();
+}</code></pre>
+<ul>
+<li>该原语的代码形态是task(event_task特化下)的子类</li>
+<li>构造函数存在两种风格的:</li>
+<li><code>all_of(task&lt;UP0, PP0&gt;&amp; target0, task&lt;UP1, PP1&gt;&amp; target1);</code> 参数为2~6个目标task的引用(2个以上参数的函数原型省略了)</li>
+<li><code>all_of(event_task* targets[], uint32 num);</code> 参数为目标task指针的数组和个数(适用于目标task超过6个时,这里需要将其他特化类型的task指针<strong>reinterpret_cast</strong>转换为event_task的特化类型)</li>
+<li>一般情况,all_of对象都是通过<strong>await</strong>调用的(即逻辑上组合为<strong>await_all_of</strong>)</li>
+<li>逻辑上,全部目标task是并发执行的(启动时是依次启动的)</li>
+<li>执行过程:</li>
+<li>检测全部目标task是否为<strong>ready</strong>状态,若不全是则置self为<strong>child_unready</strong>状态,并立即返回</li>
+<li>依次启动目标task</li>
+<li>循环等待目标task执行完毕</li>
+<li>待全部目标task执行完毕后,则self执行完毕</li>
+</ul>
+<h2 id="any_of-原语">2.6. any_of 原语</h2>
+<h3 id="section-11"></h3>
+<ul>
+<li>将多个<任务>组合为一个新的任务,任一任务执行完成后新的任务视为执行完成,同时会取消掉其他未执行完成的任务</li>
+</ul>
+<h3 id="section-12"></h3>
+<pre><code>class any_of : public event_task
+{
+public: /* 2~6 argc */
+    template&lt;uint32 UP0, uint32 PP0, uint32 UP1, uint32 PP1&gt;
+    any_of(task&lt;UP0, PP0&gt;&amp; target0, task&lt;UP1, PP1&gt;&amp; target1);
+    /* 此处省略参数数目为3~6的函数原型 */
+    any_of(event_task* targets[], uint32 num);
+    virtual ~any_of();
+    int who_completed();
+}</code></pre>
+<ul>
+<li>该原语的代码形态是task(event_task特化下)的子类</li>
+<li>构造函数存在两种风格的:</li>
+<li><code>any_of(task&lt;UP0, PP0&gt;&amp; target0, task&lt;UP1, PP1&gt;&amp; target1);</code> 参数为2~6个目标task的引用(2个以上参数的函数原型省略了)</li>
+<li><code>any_of(event_task* targets[], uint32 num);</code> 参数为目标task指针的数组和个数(适用于目标task超过6个时,这里需要将其他特化类型的task指针<strong>reinterpret_cast</strong>转换为event_task的特化类型)</li>
+<li><code>int who_completed();</code> 返回是哪个任务完成触发any_of完成的(0,1,...数字ID表示,-1:还没任何任务完成)</li>
+<li>一般情况,any_of对象都是通过<strong>await</strong>调用的(即逻辑上组合为<strong>await_any_of</strong>)</li>
+<li>逻辑上,全部目标task是并发执行的(启动时是依次启动的)</li>
+<li>执行过程:</li>
+<li>检测全部目标task是否为<strong>ready</strong>状态,若不全是则置self为<strong>child_unready</strong>状态,并立即返回</li>
+<li>依次启动目标task</li>
+<li>等待目标task执行完毕</li>
+<li>待任意目标task执行完毕后,则self执行完毕,并取消其他正在执行的目标task(具体取消逻辑请参见<a href="#%E5%8F%96%E6%B6%88%E6%A8%A1%E5%9E%8B">取消模型</a>)</li>
+</ul>
+<h1 id="事件api">3. 事件API</h1>
+<ul>
+<li>以下全部内容均在<strong>ccf</strong>命名空间中</li>
+<li>事件API又称功能API,事件API越丰富也意味着功能越丰富</li>
+<li>一般情况,事件API应该和<strong>await</strong>、<strong>all_of</strong>、<strong>any_of</strong>配合,组合逻辑分别为<strong>await某事件</strong>、<strong>all_of某些事件</strong>、<strong>any_of某些事件</strong></li>
+<li>若你需要等待某事件则为<strong>await(某事件)</strong></li>
+<li>若你需要等待某些事件则为<strong>await(all_of(某事件,某事件,...))</strong></li>
+<li>若你需要等待某些事件其中之一则为<strong>await(any_of(某事件,某事件,...))</strong></li>
+<li>示例：你需要等待两个udp的recv事件,并且需要设置一个超时时间,则你可以用使用:</li>
+</ul>
+<h3 id="section-13"></h3>
+<pre><code>await(
+    any_of(
+        all_of(
+            udp0.recv,
+            udp1.recv
+        ),
+        sleep(x ms)
+    )
+)</code></pre>
+<h2 id="sleep-休息">3.1. sleep 休息</h2>
+<h3 id="section-14"></h3>
+<pre><code>class sleep : public event_task
+{
+public:
+    sleep(uint64 timeout); //ms
+    virtual ~sleep();
+}</code></pre>
+<ul>
+<li><code>sleep(uint64 timeout);</code> 参数为休息的毫秒数</li>
+<li>该task在会等待timeout毫秒,timeout毫秒后则执行完毕</li>
+</ul>
+<h2 id="sync-同步类似信号">3.2. sync 同步(类似信号)</h2>
+<h3 id="section-15"></h3>
+<pre><code>class sync : public event_task
+{
+public:
+    sync();
+    sync(long id); //unique
+    virtual ~sync();
+    static int notify(sync* obj);
+    static int notify(long id);
+}</code></pre>
+<ul>
+<li><code>sync();</code> 创建匿名同步事件</li>
+<li><code>sync(long id);</code> 创建命名同步事件(其命名id为long整数)</li>
+<li><code>static int notify(sync* obj);</code> 通知某同步事件(一般用于通知匿名同步事件)</li>
+<li><code>static int notify(long id);</code> 通知某命名事件(通过其id号通知)</li>
+<li>该task在会一直等待被通知,接受到通知后,则执行完毕</li>
+<li>若没有对应的对象在等待被通知,则notify函数不会有任何作用</li>
+<li>同一命名同步事件,只能存在一个对象</li>
+</ul>
+<h2 id="网络事件相关回调函数">3.3. 网络事件相关回调函数</h2>
+<h3 id="section-16"></h3>
+<pre><code>typedef int seq_getter(const void* buf, size_t size, const void** pos, size_t* len);</code></pre>
+<ul>
+<li>序列号获取回调函数(udp/tcp)</li>
+<li>buf 数据包起点指针(传入参数)</li>
+<li>size 数据包长度(传入参数)</li>
+<li>pos *pos需要指向序列号的起点位置(传出参数)</li>
+<li>len *len需要等于序列号的长度(传出参数)</li>
+<li>返回: &gt;=0,成功 &lt;0,失败</li>
+</ul>
+<h3 id="section-17"></h3>
+<pre><code>typedef size_t len_getter(const void* buf, size_t size);</code></pre>
+<ul>
+<li>包长度获取回调函数(tcp,通过包头获取整个包的长度)</li>
+<li>buf 数据包起点指针(传入参数)</li>
+<li>size 数据包头长度(传入参数)</li>
+<li>返回: 数据包的长度(若小于包头长度或大于最大长度都视为错误)</li>
+</ul>
+<h3 id="section-18"></h3>
+<pre><code>typedef void pkg_seq_unrecv(const void* buf, size_t size, const void* seq, size_t len);</code></pre>
+<ul>
+<li>数据包该seq未被recv回调函数(udp/tcp)</li>
+<li>buf 数据包起点指针(传入参数)</li>
+<li>size 数据包头长度(传入参数)</li>
+<li>seq 序列号的起点指针(传入参数)</li>
+<li>len 序列号的长度(传入参数)</li>
+</ul>
+<h3 id="section-19"></h3>
+<pre><code>typedef void pkg_seq_failed(const void* buf, size_t size, int ret);</code></pre>
+<ul>
+<li>数据包seq获取失败回调函数(udp/tcp)</li>
+<li>buf 数据包起点指针(传入参数)</li>
+<li>size 数据包头长度(传入参数)</li>
+<li>ret 获取seq失败时的返回码</li>
+</ul>
+<h2 id="udp">3.4. udp</h2>
+<h3 id="section-20"></h3>
+<pre><code>class udp
+{
+public:
+    udp();
+    ~udp();
+    int bind(const struct sockaddr_in&amp; addr);
+    int bind(seq_getter* seqer);
+    int bind(pkg_seq_unrecv* unrecv);
+    int bind(pkg_seq_failed* failed);
+    unsigned long long count_unrecv() const;
+    unsigned long long count_failed() const;
+    static const void* internal_buffer(size_t&amp; len);
+}</code></pre>
+<ul>
+<li>注: udp类不是task的子类</li>
+<li>udp对象逻辑上和一个udp fd对应</li>
+<li><code>int bind(const struct sockaddr_in&amp; addr);</code> 绑定IPv4地址(若不绑定则使用随机端口),返回0成功</li>
+<li><code>int bind(seq_getter* seqer);</code> 绑定序列号获取回调函数(全部udp收包都需要调用该函数),返回0成功</li>
+<li><code>int bind(pkg_seq_unrecv* unrecv);</code> 绑定序列号未被recv的回调函数,返回0成功</li>
+<li><code>int bind(pkg_seq_failed* failed);</code> 绑定序列号获取失败的回调函数,返回0成功</li>
+<li><code>unsigned long long count_unrecv() const;</code> 获取当前序列号未被recv的计数</li>
+<li><code>unsigned long long count_failed() const;</code> 获取当前获得序列号失败的计数</li>
+<li><code>static const void* internal_buffer(size_t&amp; len);</code> 返回当前内部Buffer(参数为传出参数,len值会等于Buffer长度)</li>
+<li>若udp对象绑定了seqer则会使用内部Buffer(全部udp接收复用同一Buffer,注意有效期)</li>
+<li>使用了内部Buffer时,全部接收的数据包会先放到内部Buffer上,再获取其seq,并路由至对应的事件</li>
+<li>若udp对象绑定了seqer,收到数据包会进行seq获取匹配并优先被recv_by_seq事件捕获,未被匹配seq的和获取seq失败的数据包将优先被recv事件捕获,剩余的则会触发unrecv或failed回调</li>
+<li>接收数据包的优先级为<strong>udp::recv_by_seq事件</strong> &gt; <strong>udp::recv事件</strong> &gt; <strong>unrecv/failed回调</strong></li>
+</ul>
+<h3 id="udpsend-发送">udp::send 发送</h3>
+<pre><code>class send : public event_task
+{
+public:
+    send(udp&amp; handle, const struct sockaddr_in&amp; addr, const void* buf, size_t len);
+    virtual ~send();
+}</code></pre>
+<ul>
+<li>注: 该类是udp类的内部public类</li>
+<li>构造函数参数分别为udp对象,目标IPv4地址,数据包起点,数据包长度</li>
+<li>该task会等待udp对象中的fd可写时发送数据包</li>
+<li>注意: 该task是<strong>不可中断的</strong>(详见<a href="#%E5%8F%96%E6%B6%88%E6%A8%A1%E5%9E%8B">取消模型</a>)</li>
+</ul>
+<h3 id="udprecv-udp接收">udp::recv udp接收</h3>
+<pre><code>class recv : public event_task
+{
+public:
+    recv(udp&amp; handle, struct sockaddr* addr, void* buf, size_t&amp; len);
+    virtual ~recv();
+}</code></pre>
+<ul>
+<li>注: 该类是udp类的内部public类</li>
+<li>构造函数参数分别为udp对象,源地址指针(传出参数),数据包起点,数据包长度(传入传出参数)</li>
+<li>该task会等待udp对象中的fd可读时接收数据包并写到buf中</li>
+<li>若绑定了seqer,则buf参数可以为NULL,内部Buffer接收后将不会拷贝到buf上,可通过udp::internal_buffer函数获取Buffer</li>
+</ul>
+<h3 id="udprecv_by_seq-接收通过seq">udp::recv_by_seq 接收(通过seq)</h3>
+<pre><code>class recv_by_seq : public event_task
+{
+public:
+    recv_by_seq(udp&amp; handle, struct sockaddr* addr, void* buf, size_t&amp; len, const void* seq, size_t seq_len);
+    recv_by_seq(udp&amp; handle, struct sockaddr* addr, void* buf, size_t&amp; len, uint32 seq);
+    virtual ~recv_by_seq();
+}</code></pre>
+<ul>
+<li>注: 该类是udp类的内部public类</li>
+<li>构造函数参数分别为udp对象,源地址指针(传出参数),数据包起点,数据包长度(传入传出参数),序列号(地址+长度版本或uint32版本)</li>
+<li>使用该task前必须为udp对象<strong>绑定seqer</strong></li>
+<li>该task会等待udp对象中的fd可读时接收数据包并获取匹配seq并写到buf中</li>
+<li>buf参数可以为NULL,内部Buffer接收后将不会拷贝到buf上,可通过udp::internal_buffer函数获取Buffer</li>
+</ul>
+<h2 id="tcp">3.5. tcp</h2>
+<ul>
+<li>tcp对象有两种类型,因此tcp作为命名空间,其作为tcp命名空间下的类</li>
+</ul>
+<h3 id="tcplistening-监听对象">tcp::listening 监听对象</h3>
+<pre><code>class listening
+{
+public:
+    listening(int backlog = 64);
+    ~listening();
+    int bind(const struct sockaddr_in&amp; addr);
+}</code></pre>
+<ul>
+<li>注: listening类不是task的子类</li>
+<li>listening对象逻辑上和一个tcp listen fd对应</li>
+<li><code>listening(int backlog = 64);</code> 构造函数,backlog为fd挂起队列的最大长度(必须&gt;0)</li>
+<li><code>int bind(const struct sockaddr_in&amp; addr);</code> 绑定IPv4地址,返回0成功</li>
+</ul>
+<h3 id="tcpconnected-连接对象">tcp::connected 连接对象</h3>
+<pre><code>class connected
+{
+public:
+    connected();
+    ~connected();
+    int bind(size_t min_len, size_t max_len, len_getter* lener, seq_getter* seqer);
+    int bind(pkg_seq_unrecv* unrecv);
+    int bind(pkg_seq_failed* failed);
+    struct sockaddr_in peer_addr();
+    unsigned long long count_unrecv() const;
+    unsigned long long count_failed() const;
+    const void* internal_buffer(size_t&amp; len);
+}</code></pre>
+<ul>
+<li>注: connected类不是task的子类</li>
+<li>connected对象逻辑上和一个tcp connect fd对应</li>
+<li>使用connected对象通信前必须保证连接建立成功(通过<strong>tcp::accept</strong>或<strong>tcp::connect</strong>)</li>
+<li><code>int bind(size_t min_len, size_t max_len, len_getter* lener, seq_getter* seqer);</code> 绑定<strong>单连接异步数据通道模型</strong>,返回0成功</li>
+<li>使用该函数意味着该连接上通信的数据是乱序的数据包构成的,每个包拥有其独立的seq(<strong>流</strong>将被切割成<strong>包</strong>)</li>
+<li>min_len 数据包的最小长度(一般是包头长度,其中需要包含表示整个包长度的字段)</li>
+<li>max_len 数据包的最大产度(主要受限于内存分配)</li>
+<li>lener 包长度获取回调函数(通过包头获取整个包的长度)</li>
+<li>seqer 序列号获取回调函数</li>
+<li><code>int bind(pkg_seq_unrecv* unrecv);</code> 绑定序列号未被recv的回调函数,返回0成功</li>
+<li><code>int bind(pkg_seq_failed* failed);</code> 绑定序列号获取失败的回调函数,返回0成功</li>
+<li><code>unsigned long long count_unrecv() const;</code> 获取当前序列号未被recv的计数</li>
+<li><code>unsigned long long count_failed() const;</code> 获取当前获得序列号失败的计数</li>
+<li><code>const void* internal_buffer(size_t&amp; len);</code> 返回当前内部Buffer(参数为传出参数,len值会等于Buffer长度)</li>
+<li>若connected对象绑定了<strong>单连接异步数据通道模型</strong>则会使用内部Buffer(该Buffer针对当前connected对象,注意有效期)</li>
+<li>使用了内部Buffer时,全部接收的数据包会先放到内部Buffer上,再获取其seq,并路由至对应的事件</li>
+<li>若connected对象绑定了<strong>单连接异步数据通道模型</strong>,收到数据包会进行seq获取匹配并优先被recv_by_seq事件捕获,未被匹配seq的和获取seq失败的数据包将优先被recv事件捕获,剩余的则会触发unrecv或failed回调</li>
+<li>接收数据包的优先级为<strong>tcp::recv_by_seq事件</strong> &gt; <strong>tcp::recv事件</strong> &gt; <strong>unrecv/failed回调</strong></li>
+<li><strong>tcp::recv_till事件</strong>与<strong>其它recv事件</strong>不兼容,不能同时使用</li>
+</ul>
+<h3 id="tcp-统一返回码">tcp 统一返回码</h3>
+<pre><code>enum {
+    success = 0,
+    /* -1 ~ -20 basic error */
+    unfinished = -1,
+    failure = -2, //unknown
+    /* -21 ~ -30 accept error */
+    address_in_use = -21, //address already in use
+    /* -31 ~ -40 connect error */
+    /* -41 ~ -60 send error */
+    /* -61 ~ -80 recv error */
+    packet_length_too_short = -61, //len_getter return length &lt; min_len
+    packet_length_too_long = -62 //len_getter return length &gt; max_len
+};</code></pre>
+<ul>
+<li>以下函数返回码均可在该枚举上查询</li>
+<li>返回码有待完善(大多数返回<strong>failure</strong>)</li>
+</ul>
+<h3 id="tcpaccept-接受连接建立请求">tcp::accept 接受连接建立请求</h3>
+<pre><code>class accept : public event_task
+{
+public:
+    accept(int&amp; ret, listening&amp; handle, connected&amp; conn);
+    virtual ~accept();
+}</code></pre>
+<ul>
+<li>构造函数参数分别为返回码,listening对象,connected对象</li>
+<li>该task会等待listening对象中的fd可读时让connected对象与对端建立连接(或出错)</li>
+<li>connected对象必须是连接还未建立的</li>
+</ul>
+<h3 id="tcpconnect-发起建立连接请求">tcp::connect 发起建立连接请求</h3>
+<pre><code>class connect : public event_task
+{
+public:
+    connect(int&amp; ret, connected&amp; handle, const struct sockaddr_in&amp; addr);
+    virtual ~connect();
+}</code></pre>
+<ul>
+<li>构造函数参数分别为返回码,connected对象,目标IPv4地址</li>
+<li>该task会让connected对象中的fd向目标地址发起连接建立请求,并等待建立成功(或出错)</li>
+<li>connected对象必须是连接还未建立的</li>
+<li>若返回码为失败/错误,那么意味着该connected对象坏掉了,只能析构对象(close fd)了</li>
+</ul>
+<h3 id="tcpsend-发送">tcp::send 发送</h3>
+<pre><code>class send : public event_task
+{
+public: /* 1~4 bufs */
+    send(int&amp; ret, connected&amp; handle, const void* buf0, size_t len0);
+    /* 此处省略参数数目为2~4的函数原型 */
+    virtual ~send();
+}</code></pre>
+<ul>
+<li>构造函数参数分别为返回码,connected对象,数据包起点,数据包长度(多个参数版本类似)</li>
+<li>该task会等待connected对象中的fd可写时,向连接发送数据</li>
+<li>若返回码为失败/错误,那么意味着该connected对象坏掉了,只能析构对象(close fd)了</li>
+<li>注意: 该task是<strong>不可中断的</strong>(详见<a href="#%E5%8F%96%E6%B6%88%E6%A8%A1%E5%9E%8B">取消模型</a>)</li>
+</ul>
+<h3 id="tcprecv-接收">tcp::recv 接收</h3>
+<pre><code>class recv : public event_task
+{
+public:
+    recv(int&amp; ret, connected&amp; handle, void* buf, size_t&amp; len);
+    virtual ~recv();
+}</code></pre>
+<ul>
+<li>构造函数参数分别为返回码,connected对象,数据包起点,数据包长度(传入传出参数)</li>
+<li>该task会等待connected对象中的fd可读时,读取数据到buf中</li>
+<li>若绑定了<strong>单连接异步数据通道模型</strong>,则buf参数可以为NULL,内部Buffer接收后将不会拷贝到buf上,可通过connected.internal_buffer函数获取Buffer</li>
+<li>若返回码为失败/错误,那么意味着该connected对象坏掉了,只能析构对象(close fd)了</li>
+</ul>
+<h3 id="tcprecv_till-接收数据直到...">tcp::recv_till 接收数据直到...</h3>
+<pre><code>class recv_till : public event_task
+{
+public:
+    recv_till(int&amp; ret, connected&amp; handle, void* buf, size_t&amp; len); //till fill up buf
+    recv_till(int&amp; ret, connected&amp; handle, void* buf, size_t&amp; len, const void* pattern, size_t pattern_len); //till end with pattern
+    virtual ~recv_till();
+}</code></pre>
+<ul>
+<li><code>recv_till(int&amp; ret, connected&amp; handle, void* buf, size_t&amp; len);</code></li>
+<li>接收数据直到填充满buf</li>
+<li>参数分别为返回码,connected对象,数据包起点,数据包长度(传入传出参数)</li>
+<li><code>recv_till(int&amp; ret, connected&amp; handle, void* buf, size_t&amp; len, const void* pattern, size_t pattern_len);</code></li>
+<li>接收数据直到以模式串结尾(例如HTTP协议包头固定以&quot;&quot;结尾)(若buf已经填满还未遇到模式串则返回错误)</li>
+<li>参数分别为返回码,connected对象,数据包起点,数据包长度(传入传出参数),模式串地址,模式串长度</li>
+<li>该task会等待connected对象中的fd可读时,读取数据直到满足上述条件</li>
+<li>该接收模型与其他接收模型不兼容(不能同时用在一个connected对象上)</li>
+<li>若返回码为失败/错误,那么意味着该connected对象坏掉了,只能析构对象(close fd)了</li>
+</ul>
+<h3 id="tcprecv_by_seq">tcp::recv_by_seq</h3>
+<pre><code>class recv_by_seq : public event_task
+{
+public:
+    recv_by_seq(int&amp; ret, connected&amp; handle, void* buf, size_t&amp; len, const void* seq, size_t seq_len);
+    recv_by_seq(int&amp; ret, connected&amp; handle, void* buf, size_t&amp; len, uint32 seq);
+    virtual ~recv_by_seq();
+}</code></pre>
+<ul>
+<li>构造函数参数分别为返回码,connected对象,数据包起点,数据包长度(传入传出参数),序列号(地址+长度/uint32)</li>
+<li>使用该task前必须为connected对象绑定<strong>单连接异步数据通道模型</strong></li>
+<li>该task会等待connected对象中的fd可读时,接收数据包切割分段并获取匹配seq并写到buf中</li>
+<li>buf参数可以为NULL,内部Buffer接收后将不会拷贝到buf上,可通过connected.internal_buffer函数获取Buffer</li>
+<li>若返回码为失败/错误,那么意味着该connected对象坏掉了,只能析构对象(close fd)了</li>
+</ul>
+<h1 id="工具api">4 工具API</h1>
+<ul>
+<li>以下函数均在<strong>ccf</strong>命名空间内</li>
+<li>工具API为其它一些附加函数</li>
+</ul>
+<h3 id="section-21"></h3>
+<pre><code>struct sockaddr_in ip_to_addr(const char* ip, int port);</code></pre>
+<ul>
+<li>IPv4地址(字符串+整数)转sockaddr_in对象</li>
+<li>例如: struct sockaddr_in addr = ip_to_addr(&quot;127.0.0.1&quot;, 1337);</li>
+</ul>
+<h3 id="section-22"></h3>
+<pre><code>std::string ip_to_str(const struct sockaddr_in &amp;addr);</code></pre>
+<ul>
+<li>IPv4地址sockaddr_in对象转std::string描述</li>
+<li>例如: ip_to_str(addr); //结果为&quot;127.0.0.1:1337&quot;</li>
+</ul>
+<h3 id="section-23"></h3>
+<pre><code>void set_debug(FILE* fp);</code></pre>
+<ul>
+<li>开启debug模式(全部运行态的切换日志会记录到fp中)</li>
+</ul>
+<h1 id="取消模型">5. 取消模型</h1>
+<ul>
+<li>仅<strong>any_of</strong>原语中会涉及到取消模型</li>
+<li>在<strong>any_of</strong>原语执行过程中,若某task已经执行完毕了,则此时会<strong>取消</strong>其他正在执行的task</li>
+</ul>
+<h3 id="可中断不可中断">可中断/不可中断</h3>
+<ul>
+<li>若某个task在启动后,可以<strong>恢复到启动前的状态</strong>,则是可中断的(可取消的)</li>
+<li>例如: sleep事件,不会对其它事物产生任何影响,中断其无任何副作用,因此sleep是<strong>可中断的</strong></li>
+<li>若某个task在启动后,无法<strong>恢复到启动前的状态</strong>,则是不可中断的(不可中断的)</li>
+<li>例如: tcp::send事件,假设需要发送1024字节的数据,第一次可写事件触发,发送了512字节,此时造成了不可逆的影响,如果此时中断这个task,则会使对端接收一段不完成的数据,因此tcp::send是<strong>不可中断的</strong></li>
+<li>task基类提供<strong>uninterruptable()</strong>函数将任意task设置为<strong>不可中断的</strong></li>
+</ul>
+<h3 id="取消的过程">取消的过程</h3>
+<ul>
+<li>取消时会先判断取消的目标task是否为<strong>可中断的</strong></li>
+<li>若可中断,则中断其<strong>run()函数</strong>,然后调用其<strong>cancel()函数</strong></li>
+<li>若不可中断,则会将发起取消的any_of对象置为不可中断,然后等待目标task执行完毕(取消过程被阻塞了)</li>
+</ul>
+<h3 id="预设任务的取消">预设任务的取消</h3>
+<ul>
+<li>绝大多数取消逻辑应该是触发在预设任务上的(并且大多是超时逻辑导致的)</li>
+<li>预设任务的取消的中断机制是内置判断过程,性能非常高</li>
+<li>取消一个预设任务本质只是去掉其的事件监听</li>
+</ul>
+<h3 id="用户任务的取消">用户任务的取消</h3>
+<ul>
+<li>取消用户任务时,必定是在用户任务内调用<strong>await原语</strong>时(这个过程才会阻塞等待)</li>
+<li>此时await内部会<strong>抛出特定异常</strong>打断run()函数的运行(异常不需要用户捕获)</li>
+<li>run()函数退出后,将调用用户的cancel()函数(基类是空实现)</li>
+<li>用户任务的取消涉及到异常的抛出和捕获,性能较低</li>
+<li><strong>特别注意</strong>：若用户在run()函数中申请了某资源,则需要在cancel()函数中释放掉(否则会造成资源泄露)</li>
+<li>这一保护过程和写出<strong>异常安全</strong>的代码是等价的,下面为Demo:</li>
+</ul>
+<h3 id="section-24"></h3>
+<pre><code>class my_task : public user_task
+{
+void *resources; //某资源
+void run() {
+    resources = new xxx(); //申请资源
+    await(某task); //取消时直接从该函数中断run()函数(可以直接理解为await会抛出不可捕获的异常)
+    delete resources; //释放资源(取消时无法运行这行代码)
+}
+void cancel() {
+    delete resources; //取消时通过这行代码保证资源被释放
+}
+};</code></pre>
+</body>
+</html>
