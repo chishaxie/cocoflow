@@ -58,7 +58,8 @@ public:
 	class command : public event_task
 	{
 	public:
-		command(int* ret, const redisReply** reply, redis& handle, const char *format, ...);
+		command(int* ret, const redisReply** reply, redis& handle, const char* format, ...);
+		command(int* ret, const redisReply** reply, redis& handle, int argc, const char** argv, const size_t* argvlen = NULL);
 		virtual ~command();
 	private:
 		command(const command&);
