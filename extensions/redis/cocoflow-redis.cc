@@ -84,7 +84,7 @@ redis::command::command(int* ret, const redisReply** reply, redis& handle, const
 	: ret(ret), reply(reply), handle(handle), req((redis::command**)malloc(sizeof(redis::command*)))
 {
 	CHECK(this->req != NULL);
-	*this->req = NULL;
+	*this->req = this;
 	if (this->ret)
 		*this->ret = REDIS_UNFINISHED;
 	va_list ap;
@@ -102,7 +102,7 @@ redis::command::command(int* ret, const redisReply** reply, redis& handle, int a
 	: ret(ret), reply(reply), handle(handle), req((redis::command**)malloc(sizeof(redis::command*)))
 {
 	CHECK(this->req != NULL);
-	*this->req = NULL;
+	*this->req = this;
 	if (this->ret)
 		*this->ret = REDIS_UNFINISHED;
 	this->redis_err = redisAsyncCommandArgv(reinterpret_cast<redisAsyncContext*>(this->handle.context), redis::command_cb, this->req, argc, argv, argvlen);
@@ -118,16 +118,21 @@ void redis::command_cb(struct redisAsyncContext* c, void* r, void* privdata)
 	redis::command** req = reinterpret_cast<redis::command**>(privdata);
 	if (*req)
 	{
-		if (r)
+		if ((*req)->status() == running)
 		{
-			if ((*req)->reply)
-				*(*req)->reply = reinterpret_cast<redisReply*>(r);
-			if ((*req)->ret)
-				*(*req)->ret = REDIS_OK;
+			if (r)
+			{
+				if ((*req)->reply)
+					*(*req)->reply = reinterpret_cast<redisReply*>(r);
+				if ((*req)->ret)
+					*(*req)->ret = REDIS_OK;
+			}
+			else if ((*req)->ret)
+				*(*req)->ret = REDIS_ERR;
+			__task_stand(reinterpret_cast<event_task*>(*req));
 		}
-		else if ((*req)->ret)
-			*(*req)->ret = REDIS_ERR;
-		__task_stand(reinterpret_cast<event_task*>(*req));
+		else
+			*req = NULL;
 	}
 	free(privdata);
 }
@@ -140,7 +145,7 @@ void redis::command::run()
 			*this->ret = this->redis_err;
 		return;
 	}
-	*this->req = this;
+	CHECK(*this->req != NULL);
 	if (!__task_yield(reinterpret_cast<event_task*>(this)))
 		return;
 	*this->req = NULL;
