@@ -5,6 +5,19 @@ A C++ framework is based on coroutine and libuv, just using **start**, **await**
 
 一个基于协程和libuv的C++框架，仅通过 **start**、 **await**、 **all_of**、 **any_of** 控制流程。
 
+* 示例：你需要等待两个udp的recv事件,并且需要设置一个超时时间,则你可以用使用:
+
+###
+    await (
+        any_of (
+            all_of (
+                udp0.recv,
+                udp1.recv
+            ),
+            sleep(x ms)
+        )
+    )
+
 ### Documents: [wiki](https://github.com/chishaxie/cocoflow/wiki)
 
 ### To build:
