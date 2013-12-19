@@ -20,11 +20,9 @@ int udp::bind(const struct sockaddr_in& addr)
 
 int udp::bind(seq_getter* seqer)
 {
-	if (!seqer || this->seqer || this->receiving)
+	if (!seqer || this->seqer)
 		return -1;
 	this->seqer = seqer;
-	this->receiving = 2;
-	CHECK(uv_udp_recv_start(reinterpret_cast<uv_udp_t*>(this->sock), udp::udp_alloc_cb1, udp::udp_recv_cb1) == 0);
 	return 0;
 }
 
@@ -158,8 +156,16 @@ void udp::recv::run()
 {
 	if (!this->handle.receiving)
 	{
-		this->handle.receiving = 1;
-		CHECK(uv_udp_recv_start(reinterpret_cast<uv_udp_t*>(this->handle.sock), udp::udp_alloc_cb0, udp::udp_recv_cb0) == 0);
+		if (!this->handle.seqer)
+		{
+			this->handle.receiving = 1;
+			CHECK(uv_udp_recv_start(reinterpret_cast<uv_udp_t*>(this->handle.sock), udp::udp_alloc_cb0, udp::udp_recv_cb0) == 0);
+		}
+		else
+		{
+			this->handle.receiving = 2;
+			CHECK(uv_udp_recv_start(reinterpret_cast<uv_udp_t*>(this->handle.sock), udp::udp_alloc_cb1, udp::udp_recv_cb1) == 0);
+		}
 	}
 	this->pos = this->handle.recv_queue.insert(this->handle.recv_queue.end(), this);
 	(void)__task_yield(reinterpret_cast<event_task*>(this));
@@ -273,6 +279,11 @@ udp::recv_by_seq::recv_by_seq(udp& handle, struct sockaddr* addr, void* buf, siz
 
 void udp::recv_by_seq::run()
 {
+	if (!this->handle.receiving)
+	{
+		this->handle.receiving = 2;
+		CHECK(uv_udp_recv_start(reinterpret_cast<uv_udp_t*>(this->handle.sock), udp::udp_alloc_cb1, udp::udp_recv_cb1) == 0);
+	}
 	this->pos = this->handle.seq_mapping.insert(std::pair<sequence, recv_by_seq*>(this->seq, this));
 	(void)__task_yield(reinterpret_cast<event_task*>(this));
 }
