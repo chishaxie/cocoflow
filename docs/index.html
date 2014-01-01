@@ -324,8 +324,16 @@ public:
 <li>size 数据包头长度(传入参数)</li>
 <li>ret 获取seq失败时的返回码</li>
 </ul>
-<h2 id="udp">3.4. udp</h2>
 <h3 id="section-20"></h3>
+<pre><code>typedef void pkg_ignored(const void* buf, size_t size, const struct sockaddr* addr);</code></pre>
+<ul>
+<li>被忽略的数据包回调函数(udp)</li>
+<li>buf 数据包起点指针(传入参数)</li>
+<li>size 数据包头长度(传入参数)</li>
+<li>addr 数据包的源地址(支持IPv4/IPv6,需转型至sockaddr_in/sockaddr_in6)</li>
+</ul>
+<h2 id="udp">3.4. udp</h2>
+<h3 id="section-21"></h3>
 <pre><code>class udp
 {
 public:
@@ -336,8 +344,10 @@ public:
     int bind(seq_getter* seqer);
     int bind(pkg_seq_unrecv* unrecv);
     int bind(pkg_seq_failed* failed);
+    void ignore_recv(pkg_ignored* ignored = NULL);
     unsigned long long count_unrecv() const;
     unsigned long long count_failed() const;
+    unsigned long long count_ignored() const;
     static const void* internal_buffer(size_t&amp; len);
 }</code></pre>
 <ul>
@@ -348,8 +358,10 @@ public:
 <li><code>int bind(seq_getter* seqer);</code> 绑定序列号获取回调函数(全部udp收包都需要调用该函数),返回0成功</li>
 <li><code>int bind(pkg_seq_unrecv* unrecv);</code> 绑定序列号未被recv的回调函数,返回0成功</li>
 <li><code>int bind(pkg_seq_failed* failed);</code> 绑定序列号获取失败的回调函数,返回0成功</li>
+<li><code>void ignore_recv(pkg_ignored* ignored = NULL);</code> 忽略全部收包(用于不关注回包的场合,回调函数可用于日志监控等)</li>
 <li><code>unsigned long long count_unrecv() const;</code> 获取当前序列号未被recv的计数</li>
 <li><code>unsigned long long count_failed() const;</code> 获取当前获得序列号失败的计数</li>
+<li><code>unsigned long long count_ignored() const;</code> 获取当前被忽略的数据包的计数</li>
 <li><code>static const void* internal_buffer(size_t&amp; len);</code> 返回当前内部Buffer(参数为传出参数,len值会等于Buffer长度)</li>
 <li>若udp对象绑定了seqer则会使用内部Buffer(全部udp接收复用同一Buffer,注意有效期)</li>
 <li>使用了内部Buffer时,全部接收的数据包会先放到内部Buffer上,再获取其seq,并路由至对应的事件</li>
@@ -580,31 +592,31 @@ public:
 <li>以下函数均在<strong>ccf</strong>命名空间内</li>
 <li>工具API为其它一些附加函数</li>
 </ul>
-<h3 id="section-21"></h3>
+<h3 id="section-22"></h3>
 <pre><code>struct sockaddr_in ip_to_addr(const char* ipv4, int port);</code></pre>
 <ul>
 <li>IPv4地址(字符串+整数)转sockaddr_in对象</li>
 <li>例如: struct sockaddr_in addr = ip_to_addr(&quot;127.0.0.1&quot;, 1337);</li>
 </ul>
-<h3 id="section-22"></h3>
+<h3 id="section-23"></h3>
 <pre><code>struct sockaddr_in6 ip_to_addr6(const char* ipv6, int port);</code></pre>
 <ul>
 <li>IPv6地址(字符串+整数)转sockaddr_in6对象</li>
 <li>例如: struct sockaddr_in6 addr = ip_to_addr6(&quot;::1&quot;, 1337);</li>
 </ul>
-<h3 id="section-23"></h3>
+<h3 id="section-24"></h3>
 <pre><code>std::string ip_to_str(const struct sockaddr_in &amp;addr);</code></pre>
 <ul>
 <li>IPv4地址sockaddr_in对象转std::string描述</li>
 <li>例如: ip_to_str(addr); //结果为&quot;127.0.0.1:1337&quot;</li>
 </ul>
-<h3 id="section-24"></h3>
+<h3 id="section-25"></h3>
 <pre><code>std::string ip_to_str(const struct sockaddr_in6&amp; addr);</code></pre>
 <ul>
 <li>IPv6地址sockaddr_in6对象转std::string描述</li>
 <li>例如: ip_to_str(addr); //结果为&quot;[::1]:1337&quot;</li>
 </ul>
-<h3 id="section-25"></h3>
+<h3 id="section-26"></h3>
 <pre><code>void set_debug(FILE* fp);</code></pre>
 <ul>
 <li>开启debug模式(全部运行态的切换日志会记录到fp中)</li>
@@ -643,7 +655,7 @@ public:
 <li><strong>特别注意</strong>：若用户在run()函数中申请了某资源,则需要在cancel()函数中释放掉(否则会造成资源泄露)</li>
 <li>这一保护过程和写出<strong>异常安全</strong>的代码是等价的,下面为Demo:</li>
 </ul>
-<h3 id="section-26"></h3>
+<h3 id="section-27"></h3>
 <pre><code>class my_task : public user_task
 {
 void *resources; //某资源

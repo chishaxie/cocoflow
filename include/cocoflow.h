@@ -238,6 +238,7 @@ typedef int seq_getter(const void* buf, size_t size, const void** pos, size_t* l
 typedef size_t len_getter(const void* buf, size_t size);
 typedef void pkg_seq_unrecv(const void* buf, size_t size, const void* seq, size_t len);
 typedef void pkg_seq_failed(const void* buf, size_t size, int ret);
+typedef void pkg_ignored(const void* buf, size_t size, const struct sockaddr* addr);
 
 struct sequence
 {
@@ -323,8 +324,10 @@ public:
 	int bind(seq_getter* seqer);
 	int bind(pkg_seq_unrecv* unrecv);
 	int bind(pkg_seq_failed* failed);
+	void ignore_recv(pkg_ignored* ignored = NULL);
 	unsigned long long count_unrecv() const;
 	unsigned long long count_failed() const;
+	unsigned long long count_ignored() const;
 	static const void* internal_buffer(size_t& len);
 private:
 	udp(const udp&);
@@ -335,8 +338,10 @@ private:
 	seq_getter* seqer;
 	pkg_seq_unrecv* unrecv;
 	pkg_seq_failed* failed;
+	pkg_ignored* ignored;
 	unsigned long long c_unrecv;
 	unsigned long long c_failed;
+	unsigned long long c_ignored;
 	std::list<recv*> recv_queue;
 	std::multimap<sequence, recv_by_seq*> seq_mapping;
 	static char routing_buf[65536];
@@ -345,6 +350,8 @@ private:
 	static void udp_recv_cb0(uv_udp_t*, ssize_t, uv_buf_t, struct sockaddr*, unsigned);
 	static uv_buf_t udp_alloc_cb1(uv_handle_t*, size_t);
 	static void udp_recv_cb1(uv_udp_t*, ssize_t, uv_buf_t, struct sockaddr*, unsigned);
+	static uv_buf_t udp_alloc_cb2(uv_handle_t*, size_t);
+	static void udp_recv_cb2(uv_udp_t*, ssize_t, uv_buf_t, struct sockaddr*, unsigned);
 };
 
 namespace tcp {

@@ -4,9 +4,16 @@ namespace ccf {
 
 /***** udp *****/
 
+enum {
+	udp_receiving_ready = 0,
+	udp_receiving_recv,
+	udp_receiving_recv_by_seq,
+	udp_receiving_ignore
+};
+
 udp::udp()
-	: sock(malloc(sizeof(uv_udp_t))), receiving(0), cur_alloc(NULL), seqer(NULL),
-	  unrecv(NULL), failed(NULL), c_unrecv(0), c_failed(0)
+	: sock(malloc(sizeof(uv_udp_t))), receiving(udp_receiving_ready), cur_alloc(NULL), seqer(NULL),
+	  unrecv(NULL), failed(NULL), ignored(NULL), c_unrecv(0), c_failed(0), c_ignored(0)
 {
 	CHECK(this->sock != NULL);
 	CHECK(uv_udp_init(loop(), reinterpret_cast<uv_udp_t*>(this->sock)) == 0);
@@ -15,13 +22,13 @@ udp::udp()
 
 int udp::bind(const struct sockaddr_in& addr)
 {
-	CHECK(!this->receiving);
+	CHECK(this->receiving == udp_receiving_ready);
 	return uv_udp_bind(reinterpret_cast<uv_udp_t*>(this->sock), addr, 0);
 }
 
 int udp::bind(const struct sockaddr_in6& addr, bool ipv6_only)
 {
-	CHECK(!this->receiving);
+	CHECK(this->receiving == udp_receiving_ready);
 	return uv_udp_bind6(reinterpret_cast<uv_udp_t*>(this->sock), addr, ipv6_only? UV_UDP_IPV6ONLY: 0);
 }
 
@@ -49,6 +56,14 @@ int udp::bind(pkg_seq_failed* failed)
 	return 0;
 }
 
+void udp::ignore_recv(pkg_ignored* ignored)
+{
+	CHECK(this->receiving == udp_receiving_ready);
+	this->ignored = ignored;
+	this->receiving = udp_receiving_ignore;
+	CHECK(uv_udp_recv_start(reinterpret_cast<uv_udp_t*>(this->sock), udp::udp_alloc_cb2, udp::udp_recv_cb2) == 0);
+}
+
 unsigned long long udp::count_unrecv() const
 {
 	return this->c_unrecv;
@@ -59,9 +74,14 @@ unsigned long long udp::count_failed() const
 	return this->c_failed;
 }
 
+unsigned long long udp::count_ignored() const
+{
+	return this->c_ignored;
+}
+
 udp::~udp()
 {
-	if (this->receiving)
+	if (this->receiving != udp_receiving_ready)
 		CHECK(uv_udp_recv_stop(reinterpret_cast<uv_udp_t*>(this->sock)) == 0);
 	uv_close(reinterpret_cast<uv_handle_t*>(this->sock), free_self_close_cb);
 	reinterpret_cast<uv_udp_t*>(this->sock)->data = NULL;
@@ -165,7 +185,7 @@ void udp::udp_recv_cb0(uv_udp_t* handle, ssize_t nread, uv_buf_t buf, struct soc
 			if (obj->recv_queue.empty())
 			{
 				CHECK(uv_udp_recv_stop(reinterpret_cast<uv_udp_t*>(obj->sock)) == 0);
-				obj->receiving = 0;
+				obj->receiving = udp_receiving_ready;
 			}
 		}
 	}
@@ -196,16 +216,17 @@ struct sockaddr_in6 udp::recv::peer_addr_ipv6()
 
 void udp::recv::run()
 {
-	if (!this->handle.receiving)
+	CHECK(this->handle.receiving != udp_receiving_ignore);
+	if (this->handle.receiving == udp_receiving_ready)
 	{
 		if (!this->handle.seqer)
 		{
-			this->handle.receiving = 1;
+			this->handle.receiving = udp_receiving_recv;
 			CHECK(uv_udp_recv_start(reinterpret_cast<uv_udp_t*>(this->handle.sock), udp::udp_alloc_cb0, udp::udp_recv_cb0) == 0);
 		}
 		else
 		{
-			this->handle.receiving = 2;
+			this->handle.receiving = udp_receiving_recv_by_seq;
 			CHECK(uv_udp_recv_start(reinterpret_cast<uv_udp_t*>(this->handle.sock), udp::udp_alloc_cb1, udp::udp_recv_cb1) == 0);
 		}
 	}
@@ -216,10 +237,10 @@ void udp::recv::run()
 void udp::recv::cancel()
 {
 	this->handle.recv_queue.erase(this->pos);
-	if (this->handle.receiving == 1 && this->handle.recv_queue.empty())
+	if (this->handle.receiving == udp_receiving_recv && this->handle.recv_queue.empty())
 	{
 		CHECK(uv_udp_recv_stop(reinterpret_cast<uv_udp_t*>(this->handle.sock)) == 0);
-		this->handle.receiving = 0;
+		this->handle.receiving = udp_receiving_ready;
 	}
 }
 
@@ -348,9 +369,10 @@ struct sockaddr_in6 udp::recv_by_seq::peer_addr_ipv6()
 
 void udp::recv_by_seq::run()
 {
-	if (!this->handle.receiving)
+	CHECK(this->handle.receiving != udp_receiving_ignore);
+	if (this->handle.receiving == udp_receiving_ready)
 	{
-		this->handle.receiving = 2;
+		this->handle.receiving = udp_receiving_recv_by_seq;
 		CHECK(uv_udp_recv_start(reinterpret_cast<uv_udp_t*>(this->handle.sock), udp::udp_alloc_cb1, udp::udp_recv_cb1) == 0);
 	}
 	this->pos = this->handle.seq_mapping.insert(std::pair<sequence, recv_by_seq*>(this->seq, this));
@@ -364,6 +386,25 @@ void udp::recv_by_seq::cancel()
 
 udp::recv_by_seq::~recv_by_seq()
 {
+}
+
+/***** udp.ignore *****/
+
+uv_buf_t udp::udp_alloc_cb2(uv_handle_t* handle, size_t suggested_size)
+{
+	return uv_buf_init(udp::routing_buf, sizeof(udp::routing_buf));
+}
+
+void udp::udp_recv_cb2(uv_udp_t* handle, ssize_t nread, uv_buf_t buf, struct sockaddr* addr, unsigned flags)
+{
+	CHECK(nread >= 0);
+	if (nread == 0)
+		return;
+	udp* obj = reinterpret_cast<udp*>(handle->data);
+	udp::routing_len = nread;
+	obj->c_ignored ++;
+	if (obj->ignored)
+		obj->ignored(udp::routing_buf, udp::routing_len, addr);
 }
 
 }
