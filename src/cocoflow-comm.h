@@ -169,6 +169,11 @@ inline void __task_stand(event_task* cur)
 
 void free_self_close_cb(uv_handle_t* handle);
 
+/***** sockaddr *****/
+
+struct sockaddr_in6 sockaddr_in_into_sockaddr_in6(const struct sockaddr_in& addr);
+struct sockaddr_in sockaddr_in_outof_sockaddr_in6(const struct sockaddr_in6& addr);
+
 }
 
 #endif

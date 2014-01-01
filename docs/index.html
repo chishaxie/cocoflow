@@ -332,6 +332,7 @@ public:
     udp();
     ~udp();
     int bind(const struct sockaddr_in&amp; addr);
+    int bind(const struct sockaddr_in6&amp; addr, bool ipv6_only = false);
     int bind(seq_getter* seqer);
     int bind(pkg_seq_unrecv* unrecv);
     int bind(pkg_seq_failed* failed);
@@ -343,6 +344,7 @@ public:
 <li>注: udp类不是task的子类</li>
 <li>udp对象逻辑上和一个udp fd对应</li>
 <li><code>int bind(const struct sockaddr_in&amp; addr);</code> 绑定IPv4地址(若不绑定则使用随机端口),返回0成功</li>
+<li><code>int bind(const struct sockaddr_in6&amp; addr, bool ipv6_only = false);</code> 绑定IPv6地址(若不绑定则使用随机端口),返回0成功</li>
 <li><code>int bind(seq_getter* seqer);</code> 绑定序列号获取回调函数(全部udp收包都需要调用该函数),返回0成功</li>
 <li><code>int bind(pkg_seq_unrecv* unrecv);</code> 绑定序列号未被recv的回调函数,返回0成功</li>
 <li><code>int bind(pkg_seq_failed* failed);</code> 绑定序列号获取失败的回调函数,返回0成功</li>
@@ -359,11 +361,12 @@ public:
 {
 public:
     send(udp&amp; handle, const struct sockaddr_in&amp; addr, const void* buf, size_t len);
+    send(udp&amp; handle, const struct sockaddr_in6&amp; addr, const void* buf, size_t len);
     virtual ~send();
 }</code></pre>
 <ul>
 <li>注: 该类是udp类的内部public类</li>
-<li>构造函数参数分别为udp对象,目标IPv4地址,数据包起点,数据包长度</li>
+<li>构造函数参数分别为udp对象,目标IPv4/IPv6地址,数据包起点,数据包长度</li>
 <li>该task会等待udp对象中的fd可写时发送数据包</li>
 <li>注意: 该task是<strong>不可中断的</strong>(详见<a href="#%E5%8F%96%E6%B6%88%E6%A8%A1%E5%9E%8B">取消模型</a>)</li>
 </ul>
@@ -371,29 +374,41 @@ public:
 <pre><code>class recv : public event_task
 {
 public:
-    recv(udp&amp; handle, struct sockaddr* addr, void* buf, size_t&amp; len);
+    recv(udp&amp; handle, void* buf, size_t&amp; len);
     virtual ~recv();
+    uint16 peer_type();
+    struct sockaddr_in peer_addr_ipv4();
+    struct sockaddr_in6 peer_addr_ipv6();
 }</code></pre>
 <ul>
 <li>注: 该类是udp类的内部public类</li>
-<li>构造函数参数分别为udp对象,源地址指针(传出参数),数据包起点,数据包长度(传入传出参数)</li>
+<li>构造函数参数分别为udp对象,数据包起点,数据包长度(传入传出参数)</li>
 <li>该task会等待udp对象中的fd可读时接收数据包并写到buf中</li>
 <li>若绑定了seqer,则buf参数可以为NULL,内部Buffer接收后将不会拷贝到buf上,可通过udp::internal_buffer函数获取Buffer</li>
+<li><code>uint16 peer_type();</code> 获取对端类型(返回AF_INET/AF_INET6)</li>
+<li><code>struct sockaddr_in peer_addr_ipv4();</code> 获取对端IPv4地址(需确保对端类型为AF_INET)</li>
+<li><code>struct sockaddr_in6 peer_addr_ipv6();</code> 获取对端IPv6地址(需确保对端类型为AF_INET6)</li>
 </ul>
 <h3 id="udprecv_by_seq-接收通过seq">udp::recv_by_seq 接收(通过seq)</h3>
 <pre><code>class recv_by_seq : public event_task
 {
 public:
-    recv_by_seq(udp&amp; handle, struct sockaddr* addr, void* buf, size_t&amp; len, const void* seq, size_t seq_len);
-    recv_by_seq(udp&amp; handle, struct sockaddr* addr, void* buf, size_t&amp; len, uint32 seq);
+    recv_by_seq(udp&amp; handle, void* buf, size_t&amp; len, const void* seq, size_t seq_len);
+    recv_by_seq(udp&amp; handle, void* buf, size_t&amp; len, uint32 seq);
     virtual ~recv_by_seq();
+    uint16 peer_type();
+    struct sockaddr_in peer_addr_ipv4();
+    struct sockaddr_in6 peer_addr_ipv6();
 }</code></pre>
 <ul>
 <li>注: 该类是udp类的内部public类</li>
-<li>构造函数参数分别为udp对象,源地址指针(传出参数),数据包起点,数据包长度(传入传出参数),序列号(地址+长度版本或uint32版本)</li>
+<li>构造函数参数分别为udp对象,数据包起点,数据包长度(传入传出参数),序列号(地址+长度版本或uint32版本)</li>
 <li>使用该task前必须为udp对象<strong>绑定seqer</strong></li>
 <li>该task会等待udp对象中的fd可读时接收数据包并获取匹配seq并写到buf中</li>
 <li>buf参数可以为NULL,内部Buffer接收后将不会拷贝到buf上,可通过udp::internal_buffer函数获取Buffer</li>
+<li><code>uint16 peer_type();</code> 获取对端类型(返回AF_INET/AF_INET6)</li>
+<li><code>struct sockaddr_in peer_addr_ipv4();</code> 获取对端IPv4地址(需确保对端类型为AF_INET)</li>
+<li><code>struct sockaddr_in6 peer_addr_ipv6();</code> 获取对端IPv6地址(需确保对端类型为AF_INET6)</li>
 </ul>
 <h2 id="tcp">3.5. tcp</h2>
 <ul>
@@ -406,12 +421,14 @@ public:
     listening(int backlog = 64);
     ~listening();
     int bind(const struct sockaddr_in&amp; addr);
+    int bind(const struct sockaddr_in6&amp; addr);
 }</code></pre>
 <ul>
 <li>注: listening类不是task的子类</li>
 <li>listening对象逻辑上和一个tcp listen fd对应</li>
 <li><code>listening(int backlog = 64);</code> 构造函数,backlog为fd挂起队列的最大长度(必须&gt;0)</li>
 <li><code>int bind(const struct sockaddr_in&amp; addr);</code> 绑定IPv4地址,返回0成功</li>
+<li><code>int bind(const struct sockaddr_in6&amp; addr);</code> 绑定IPv6地址,返回0成功</li>
 </ul>
 <h3 id="tcpconnected-连接对象">tcp::connected 连接对象</h3>
 <pre><code>class connected
@@ -422,7 +439,9 @@ public:
     int bind(size_t min_len, size_t max_len, len_getter* lener, seq_getter* seqer);
     int bind(pkg_seq_unrecv* unrecv);
     int bind(pkg_seq_failed* failed);
-    struct sockaddr_in peer_addr();
+    uint16 peer_type();
+    struct sockaddr_in peer_addr_ipv4();
+    struct sockaddr_in6 peer_addr_ipv6();
     unsigned long long count_unrecv() const;
     unsigned long long count_failed() const;
     const void* internal_buffer(size_t&amp; len);
@@ -439,6 +458,9 @@ public:
 <li>seqer 序列号获取回调函数</li>
 <li><code>int bind(pkg_seq_unrecv* unrecv);</code> 绑定序列号未被recv的回调函数,返回0成功</li>
 <li><code>int bind(pkg_seq_failed* failed);</code> 绑定序列号获取失败的回调函数,返回0成功</li>
+<li><code>uint16 peer_type();</code> 获取对端类型(返回AF_INET/AF_INET6)</li>
+<li><code>struct sockaddr_in peer_addr_ipv4();</code> 获取对端IPv4地址(需确保对端类型为AF_INET)</li>
+<li><code>struct sockaddr_in6 peer_addr_ipv6();</code> 获取对端IPv6地址(需确保对端类型为AF_INET6)</li>
 <li><code>unsigned long long count_unrecv() const;</code> 获取当前序列号未被recv的计数</li>
 <li><code>unsigned long long count_failed() const;</code> 获取当前获得序列号失败的计数</li>
 <li><code>const void* internal_buffer(size_t&amp; len);</code> 返回当前内部Buffer(参数为传出参数,len值会等于Buffer长度)</li>
@@ -483,10 +505,11 @@ public:
 {
 public:
     connect(int&amp; ret, connected&amp; handle, const struct sockaddr_in&amp; addr);
+    connect(int&amp; ret, connected&amp; handle, const struct sockaddr_in6&amp; addr);
     virtual ~connect();
 }</code></pre>
 <ul>
-<li>构造函数参数分别为返回码,connected对象,目标IPv4地址</li>
+<li>构造函数参数分别为返回码,connected对象,目标IPv4/IPv6地址</li>
 <li>该task会让connected对象中的fd向目标地址发起连接建立请求,并等待建立成功(或出错)</li>
 <li>connected对象必须是连接还未建立的</li>
 <li>若返回码为失败/错误,那么意味着该connected对象坏掉了,只能析构对象(close fd)了</li>
@@ -558,18 +581,30 @@ public:
 <li>工具API为其它一些附加函数</li>
 </ul>
 <h3 id="section-21"></h3>
-<pre><code>struct sockaddr_in ip_to_addr(const char* ip, int port);</code></pre>
+<pre><code>struct sockaddr_in ip_to_addr(const char* ipv4, int port);</code></pre>
 <ul>
 <li>IPv4地址(字符串+整数)转sockaddr_in对象</li>
 <li>例如: struct sockaddr_in addr = ip_to_addr(&quot;127.0.0.1&quot;, 1337);</li>
 </ul>
 <h3 id="section-22"></h3>
+<pre><code>struct sockaddr_in6 ip_to_addr6(const char* ipv6, int port);</code></pre>
+<ul>
+<li>IPv6地址(字符串+整数)转sockaddr_in6对象</li>
+<li>例如: struct sockaddr_in6 addr = ip_to_addr6(&quot;::1&quot;, 1337);</li>
+</ul>
+<h3 id="section-23"></h3>
 <pre><code>std::string ip_to_str(const struct sockaddr_in &amp;addr);</code></pre>
 <ul>
 <li>IPv4地址sockaddr_in对象转std::string描述</li>
 <li>例如: ip_to_str(addr); //结果为&quot;127.0.0.1:1337&quot;</li>
 </ul>
-<h3 id="section-23"></h3>
+<h3 id="section-24"></h3>
+<pre><code>std::string ip_to_str(const struct sockaddr_in6&amp; addr);</code></pre>
+<ul>
+<li>IPv6地址sockaddr_in6对象转std::string描述</li>
+<li>例如: ip_to_str(addr); //结果为&quot;[::1]:1337&quot;</li>
+</ul>
+<h3 id="section-25"></h3>
 <pre><code>void set_debug(FILE* fp);</code></pre>
 <ul>
 <li>开启debug模式(全部运行态的切换日志会记录到fp中)</li>
@@ -608,7 +643,7 @@ public:
 <li><strong>特别注意</strong>：若用户在run()函数中申请了某资源,则需要在cancel()函数中释放掉(否则会造成资源泄露)</li>
 <li>这一保护过程和写出<strong>异常安全</strong>的代码是等价的,下面为Demo:</li>
 </ul>
-<h3 id="section-24"></h3>
+<h3 id="section-26"></h3>
 <pre><code>class my_task : public user_task
 {
 void *resources; //某资源

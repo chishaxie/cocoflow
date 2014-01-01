@@ -28,7 +28,7 @@ class recv_task: public ccf::user_task
 		for (int i=0; i<TEST_TIMES; i++)
 		{
 			size_t len = sizeof(buf);
-			ccf::udp::recv ur(u, NULL, buf, len);
+			ccf::udp::recv ur(u, buf, len);
 			await(ur);
 			cout << "recv_task recv " << len << endl;
 		}

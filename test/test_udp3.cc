@@ -30,8 +30,10 @@ class echo_task: public ccf::user_task
 		struct sockaddr_in peer;
 		size_t len = sizeof(buf);
 		ccf::uint64 t = simple_rand()%10000;
-		ccf::udp::recv ur(echo_task::u, (struct sockaddr *)&peer, buf, len);
+		ccf::udp::recv ur(echo_task::u, buf, len);
 		await(ur);
+		ASSERT(ur.peer_type() == AF_INET);
+		peer = ur.peer_addr_ipv4();
 		if (++echo_task::times < TEST_TIMES)
 			ccf::start(new echo_task());
 		cout << "echo_task recv " << len << " from " << ccf::ip_to_str(peer) << endl;
@@ -77,7 +79,7 @@ class seq_task: public ccf::user_task
 		await(us);
 		cout << "seq_task send " << sizeof(ccf::uint32) + add_len << ", seq = " << this->seq << endl;
 		size_t len = sizeof(buf);
-		ccf::udp::recv_by_seq ur(seq_task::u, NULL, buf, len, this->seq);
+		ccf::udp::recv_by_seq ur(seq_task::u, buf, len, this->seq);
 		await(ur);
 		cout << "seq_task recv " << len << ", seq = " << this->seq << endl;
 		if (++seq_task::times == TEST_TIMES)

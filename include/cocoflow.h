@@ -10,6 +10,7 @@
 
 #if defined(_WIN32) || defined(_WIN64)
 # include <winsock2.h>
+# include <ws2tcpip.h>
 	#if !defined(_SSIZE_T_) && !defined(_SSIZE_T_DEFINED)
 		typedef intptr_t ssize_t;
 		#define _SSIZE_T_
@@ -53,9 +54,11 @@ extern "C" {
 namespace ccf {
 
 #if !defined(_MSC_VER) || _MSC_VER >= 1600
+	typedef uint16_t uint16;
 	typedef uint32_t uint32;
 	typedef uint64_t uint64;
 #else
+	typedef unsigned __int16 uint16;
 	typedef unsigned __int32 uint32;
 	typedef unsigned __int64 uint64;
 #endif
@@ -258,6 +261,7 @@ public:
 	{
 	public:
 		send(udp& handle, const struct sockaddr_in& addr, const void* buf, size_t len);
+		send(udp& handle, const struct sockaddr_in6& addr, const void* buf, size_t len);
 		virtual ~send();
 	private:
 		send(const send&);
@@ -265,50 +269,57 @@ public:
 		virtual void run();
 		virtual void cancel();
 		udp& handle;
-		const struct sockaddr_in addr;
+		const struct sockaddr_in6 addr;
 		uv_buf_t buf;
 		friend class udp;
 	};
 	class recv : public event_task
 	{
 	public:
-		recv(udp& handle, struct sockaddr* addr, void* buf, size_t& len);
+		recv(udp& handle, void* buf, size_t& len);
 		virtual ~recv();
+		uint16 peer_type();
+		struct sockaddr_in peer_addr_ipv4();
+		struct sockaddr_in6 peer_addr_ipv6();
 	private:
 		recv(const recv&);
 		recv& operator=(const recv&);
 		virtual void run();
 		virtual void cancel();
 		udp& handle;
-		struct sockaddr* addr;
 		void* buf;
 		size_t& len;
+		struct sockaddr_in6 addr;
 		std::list<recv*>::iterator pos;
 		friend class udp;
 	};
 	class recv_by_seq : public event_task
 	{
 	public:
-		recv_by_seq(udp& handle, struct sockaddr* addr, void* buf, size_t& len, const void* seq, size_t seq_len);
-		recv_by_seq(udp& handle, struct sockaddr* addr, void* buf, size_t& len, uint32 seq);
+		recv_by_seq(udp& handle, void* buf, size_t& len, const void* seq, size_t seq_len);
+		recv_by_seq(udp& handle, void* buf, size_t& len, uint32 seq);
 		virtual ~recv_by_seq();
+		uint16 peer_type();
+		struct sockaddr_in peer_addr_ipv4();
+		struct sockaddr_in6 peer_addr_ipv6();
 	private:
 		recv_by_seq(const recv_by_seq&);
 		recv_by_seq& operator=(const recv_by_seq&);
 		virtual void run();
 		virtual void cancel();
 		udp& handle;
-		struct sockaddr* addr;
 		void* buf;
 		size_t& len;
 		uint32 seq32;
 		sequence seq;
+		struct sockaddr_in6 addr;
 		std::multimap<sequence, recv_by_seq*>::iterator pos;
 		friend class udp;
 	};
 	udp();
 	~udp();
 	int bind(const struct sockaddr_in& addr);
+	int bind(const struct sockaddr_in6& addr, bool ipv6_only = false);
 	int bind(seq_getter* seqer);
 	int bind(pkg_seq_unrecv* unrecv);
 	int bind(pkg_seq_failed* failed);
@@ -360,6 +371,7 @@ public:
 	listening(int backlog = 64);
 	~listening();
 	int bind(const struct sockaddr_in& addr);
+	int bind(const struct sockaddr_in6& addr);
 private:
 	listening(const listening&);
 	listening& operator=(const listening&);
@@ -385,7 +397,9 @@ public:
 	int bind(size_t min_len, size_t max_len, len_getter* lener, seq_getter* seqer);
 	int bind(pkg_seq_unrecv* unrecv);
 	int bind(pkg_seq_failed* failed);
-	struct sockaddr_in peer_addr();
+	uint16 peer_type();
+	struct sockaddr_in peer_addr_ipv4();
+	struct sockaddr_in6 peer_addr_ipv6();
 	unsigned long long count_unrecv() const;
 	unsigned long long count_failed() const;
 	const void* internal_buffer(size_t& len); //Just for recv_by_seq
@@ -456,6 +470,7 @@ class connect : public event_task
 {
 public:
 	connect(int& ret, connected& handle, const struct sockaddr_in& addr);
+	connect(int& ret, connected& handle, const struct sockaddr_in6& addr);
 	virtual ~connect();
 private:
 	connect(const connect&);
@@ -465,7 +480,7 @@ private:
 	void *req;
 	int& ret;
 	connected& handle;
-	const struct sockaddr_in& addr;
+	const struct sockaddr_in6 addr;
 	friend class connected;
 };
 
@@ -554,8 +569,10 @@ private:
 
 } /* end of namespace tcp */
 
-struct sockaddr_in ip_to_addr(const char* ip, int port);
-std::string ip_to_str(const struct sockaddr_in &addr);
+struct sockaddr_in ip_to_addr(const char* ipv4, int port);
+struct sockaddr_in6 ip_to_addr6(const char* ipv6, int port);
+std::string ip_to_str(const struct sockaddr_in& addr);
+std::string ip_to_str(const struct sockaddr_in6& addr);
 
 void set_debug(FILE* fp);
 

@@ -19,7 +19,14 @@ listening::listening(int backlog)
 
 int listening::bind(const struct sockaddr_in& addr)
 {
+	CHECK(!this->accepting);
 	return uv_tcp_bind(reinterpret_cast<uv_tcp_t*>(this->sock), addr);
+}
+
+int listening::bind(const struct sockaddr_in6& addr)
+{
+	CHECK(!this->accepting);
+	return uv_tcp_bind6(reinterpret_cast<uv_tcp_t*>(this->sock), addr);
 }
 
 listening::~listening()
@@ -96,16 +103,6 @@ connected::connected()
 	reinterpret_cast<uv_tcp_t*>(this->sock)->data = this;
 }
 
-struct sockaddr_in connected::peer_addr()
-{
-	struct sockaddr_in peer;
-	int len = sizeof(peer);
-	CHECK(this->established == true);
-	CHECK(uv_tcp_getpeername(reinterpret_cast<uv_tcp_t*>(this->sock), reinterpret_cast<struct sockaddr*>(&peer), &len) == 0);
-	CHECK(len == (int)sizeof(peer));
-	return peer;
-}
-
 int connected::bind(size_t min_len, size_t max_len, len_getter* lener, seq_getter* seqer)
 {
 	if (!min_len || !max_len || !lener || !seqer || this->header_len || this->receiving)
@@ -134,6 +131,36 @@ int connected::bind(pkg_seq_failed* failed)
 	if (!failed || this->failed)
 	this->failed = failed;
 	return 0;
+}
+
+uint16 connected::peer_type()
+{
+	struct sockaddr_in6 peer;
+	int len = sizeof(peer);
+	CHECK(this->established == true);
+	CHECK(uv_tcp_getpeername(reinterpret_cast<uv_tcp_t*>(this->sock), reinterpret_cast<struct sockaddr*>(&peer), &len) == 0);
+	CHECK(len >= (int)sizeof(uint16));
+	return peer.sin6_family;
+}
+
+struct sockaddr_in connected::peer_addr_ipv4()
+{
+	struct sockaddr_in6 peer;
+	int len = sizeof(peer);
+	CHECK(this->established == true);
+	CHECK(uv_tcp_getpeername(reinterpret_cast<uv_tcp_t*>(this->sock), reinterpret_cast<struct sockaddr*>(&peer), &len) == 0);
+	CHECK(len == (int)sizeof(struct sockaddr_in) && peer.sin6_family == AF_INET);
+	return sockaddr_in_outof_sockaddr_in6(peer);
+}
+
+struct sockaddr_in6 connected::peer_addr_ipv6()
+{
+	struct sockaddr_in6 peer;
+	int len = sizeof(peer);
+	CHECK(this->established == true);
+	CHECK(uv_tcp_getpeername(reinterpret_cast<uv_tcp_t*>(this->sock), reinterpret_cast<struct sockaddr*>(&peer), &len) == 0);
+	CHECK(len == (int)sizeof(struct sockaddr_in6) && peer.sin6_family == AF_INET6);
+	return peer;
 }
 
 unsigned long long connected::count_unrecv() const
@@ -224,8 +251,16 @@ void connected::tcp_connect_cb(uv_connect_t* req, int status)
 }
 
 connect::connect(int& ret, connected& handle, const struct sockaddr_in& addr)
+	: req(NULL), ret(ret), handle(handle), addr(sockaddr_in_into_sockaddr_in6(addr))
+{
+	CHECK(this->addr.sin6_family == AF_INET);
+	this->ret = unfinished;
+}
+
+connect::connect(int& ret, connected& handle, const struct sockaddr_in6& addr)
 	: req(NULL), ret(ret), handle(handle), addr(addr)
 {
+	CHECK(this->addr.sin6_family == AF_INET6);
 	this->ret = unfinished;
 }
 
@@ -234,7 +269,10 @@ void connect::run()
 	CHECK(this->handle.broken == false);
 	this->req = malloc(sizeof(uv_connect_t));
 	CHECK(this->req != NULL);
-	CHECK(uv_tcp_connect(reinterpret_cast<uv_connect_t*>(this->req), reinterpret_cast<uv_tcp_t*>(this->handle.sock), this->addr, connected::tcp_connect_cb) == 0);
+	if (this->addr.sin6_family == AF_INET)
+		CHECK(uv_tcp_connect(reinterpret_cast<uv_connect_t*>(this->req), reinterpret_cast<uv_tcp_t*>(this->handle.sock), *reinterpret_cast<const struct sockaddr_in*>(&this->addr), connected::tcp_connect_cb) == 0);
+	else //AF_INET6
+		CHECK(uv_tcp_connect6(reinterpret_cast<uv_connect_t*>(this->req), reinterpret_cast<uv_tcp_t*>(this->handle.sock), this->addr, connected::tcp_connect_cb) == 0);
 	reinterpret_cast<uv_connect_t*>(this->req)->data = this;
 	(void)__task_yield(reinterpret_cast<event_task*>(this));
 }

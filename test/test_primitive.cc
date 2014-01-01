@@ -153,7 +153,7 @@ class check_unsupport: public ccf::user_task
 	{
 		char buf[4096];
 		size_t len = sizeof(buf);
-		ccf::udp::recv ur(check_unsupport::u, NULL, buf, len);
+		ccf::udp::recv ur(check_unsupport::u, buf, len);
 		await(ur);
 		ccf::sleep s(20);
 		await(s); //Ensure awiat sync
