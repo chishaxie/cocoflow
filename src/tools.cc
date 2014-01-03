@@ -1,21 +1,30 @@
 #include "cocoflow-comm.h"
 
+#if defined(_MSC_VER)
+	#pragma warning(disable:4748)
+#endif
+
 namespace ccf {
 
 /***** tools *****/
 
+union addr_ip {
+	struct sockaddr_in6 addr6;
+	struct sockaddr_in  addr4;
+};
+
 struct sockaddr_in6 sockaddr_in_into_sockaddr_in6(const struct sockaddr_in& addr)
 {
-	struct sockaddr_in6 addr6;
-	memcpy(&addr6, &addr, sizeof(struct sockaddr_in));
-	return addr6;
+	union addr_ip uaddr;
+	uaddr.addr4 = addr;
+	return uaddr.addr6;
 }
 
 struct sockaddr_in sockaddr_in_outof_sockaddr_in6(const struct sockaddr_in6& addr)
 {
-	struct sockaddr_in addr4;
-	memcpy(&addr4, &addr, sizeof(struct sockaddr_in));
-	return addr4;
+	union addr_ip uaddr;
+	uaddr.addr6 = addr;
+	return uaddr.addr4;
 }
 
 struct sockaddr_in ip_to_addr(const char* ipv4, int port)
@@ -28,6 +37,16 @@ struct sockaddr_in6 ip_to_addr6(const char* ipv6, int port)
 	return uv_ip6_addr(ipv6, port);
 }
 
+std::string ip_to_str(const struct sockaddr* addr)
+{
+	if (addr->sa_family == AF_INET)
+		return ip_to_str(*reinterpret_cast<const struct sockaddr_in*>(addr));
+	else if (addr->sa_family == AF_INET6)
+		return ip_to_str(*reinterpret_cast<const struct sockaddr_in6*>(addr));
+	else
+		return std::string("Not IP Address");
+}
+
 std::string ip_to_str(const struct sockaddr_in& addr)
 {
 	char str[112], tmp[16];
@@ -37,7 +56,7 @@ std::string ip_to_str(const struct sockaddr_in& addr)
 		strcat(str, tmp);
 	}
 	else
-		strcpy(str, "Illegal Address");
+		strcpy(str, "Illegal IPv4 Address");
 	return std::string(str);
 }
 
@@ -51,7 +70,7 @@ std::string ip_to_str(const struct sockaddr_in6& addr)
 		strcat(str, tmp);
 	}
 	else
-		strcpy(str, "Illegal Address");
+		strcpy(str, "Illegal IPv6 Address");
 	return std::string(str);
 }
 

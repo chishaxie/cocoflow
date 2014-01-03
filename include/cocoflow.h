@@ -578,6 +578,7 @@ private:
 
 struct sockaddr_in ip_to_addr(const char* ipv4, int port);
 struct sockaddr_in6 ip_to_addr6(const char* ipv6, int port);
+std::string ip_to_str(const struct sockaddr* addr);
 std::string ip_to_str(const struct sockaddr_in& addr);
 std::string ip_to_str(const struct sockaddr_in6& addr);
 
