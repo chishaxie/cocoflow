@@ -108,7 +108,7 @@ void udp::send::run()
 	else //AF_INET6
 		CHECK(uv_udp_send6(&req, reinterpret_cast<uv_udp_t*>(this->handle.sock), &this->buf, 1, this->addr, udp_send_cb) == 0);
 	req.data = this;
-	(void)__task_yield(reinterpret_cast<event_task*>(this));
+	(void)__task_yield(this);
 }
 
 void udp::send::cancel()
@@ -209,7 +209,7 @@ void udp::recv::run()
 		}
 	}
 	this->pos = this->handle.recv_queue.insert(this->handle.recv_queue.end(), this);
-	(void)__task_yield(reinterpret_cast<event_task*>(this));
+	(void)__task_yield(this);
 }
 
 void udp::recv::cancel()
@@ -261,7 +261,7 @@ void udp::udp_recv_cb1(uv_udp_t* handle, ssize_t nread, uv_buf_t buf, struct soc
 			}
 			else
 				rbs->len = udp::routing_len;
-			__task_stand(reinterpret_cast<event_task*>(rbs));
+			__task_stand(rbs);
 		}
 		else
 		{
@@ -285,24 +285,24 @@ void udp::udp_recv_cb1(uv_udp_t* handle, ssize_t nread, uv_buf_t buf, struct soc
 		{
 ____udp_recv_cb_rqne:
 			std::list<udp::recv*>::iterator it = obj->recv_queue.begin();
+			udp::recv* r = *it;
+			obj->recv_queue.erase(it);
 			if (addr->sa_family == AF_INET)
-				(*it)->addr = sockaddr_in_into_sockaddr_in6(*reinterpret_cast<struct sockaddr_in*>(addr));
+				r->addr = sockaddr_in_into_sockaddr_in6(*reinterpret_cast<struct sockaddr_in*>(addr));
 			else if (addr->sa_family == AF_INET6)
-				(*it)->addr = *reinterpret_cast<struct sockaddr_in6*>(addr);
+				r->addr = *reinterpret_cast<struct sockaddr_in6*>(addr);
 			else
-				(*it)->addr.sin6_family = addr->sa_family;
-			if ((*it)->buf)
+				r->addr.sin6_family = addr->sa_family;
+			if (r->buf)
 			{
-				if ((*it)->len > udp::routing_len)
-					(*it)->len = udp::routing_len;
-				if ((*it)->len)
-					memcpy((*it)->buf, udp::routing_buf, (*it)->len);
+				if (r->len > udp::routing_len)
+					r->len = udp::routing_len;
+				if (r->len)
+					memcpy(r->buf, udp::routing_buf, r->len);
 			}
 			else
-				(*it)->len = udp::routing_len;
-			event_task* target = reinterpret_cast<event_task*>(*it);
-			obj->recv_queue.erase(it);
-			__task_stand(target);
+				r->len = udp::routing_len;
+			__task_stand(r);
 		}
 	}
 	udp::routing_len = 0;
@@ -344,7 +344,7 @@ void udp::recv_by_seq_if::run_part_0()
 
 void udp::recv_by_seq_if::run_part_1()
 {
-	(void)__task_yield(reinterpret_cast<event_task*>(this));
+	(void)__task_yield(this);
 }
 
 udp::recv_by_seq_if::~recv_by_seq_if()

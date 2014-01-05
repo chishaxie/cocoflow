@@ -32,7 +32,7 @@ void sync::run()
 	CHECK(this->async != NULL);
 	CHECK(uv_async_init(loop(), reinterpret_cast<uv_async_t*>(this->async), sync_cb) == 0);
 	reinterpret_cast<uv_async_t*>(this->async)->data = this;
-	if (!__task_yield(reinterpret_cast<event_task*>(this)))
+	if (!__task_yield(this))
 		return;
 	if (this->named)
 		sync::ids.erase(this->pos);

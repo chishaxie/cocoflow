@@ -6,6 +6,13 @@ namespace ccf {
 
 namespace tcp {
 
+enum {
+	tcp_receiving_ready = 0,
+	tcp_receiving_recv,
+	tcp_receiving_recv_till,
+	tcp_receiving_recv_by_seq
+};
+
 /***** tcp.listening *****/
 
 listening::listening(int backlog)
@@ -79,7 +86,7 @@ void accept::run()
 		CHECK(ret == 0);
 		this->handle.accepting = true;
 	}
-	(void)__task_yield(reinterpret_cast<event_task*>(this));
+	(void)__task_yield(this);
 }
 
 void accept::cancel()
@@ -94,7 +101,7 @@ accept::~accept()
 /***** tcp.connected *****/
 
 connected::connected()
-	: sock(malloc(sizeof(uv_tcp_t))), established(false), broken(false), receiving(0), cur_alloc0(NULL), cur_alloc1(NULL),
+	: sock(malloc(sizeof(uv_tcp_t))), established(false), broken(false), receiving(tcp_receiving_ready), cur_alloc0(NULL), cur_alloc1(NULL),
 	  buf1(NULL), size1(0), len1(0), buf2(NULL), size2(0), len2(0), header_len(0), packet_len(0),
 	  lener(NULL), seqer(NULL), c_unrecv(0), c_failed(0), async_cancel1(NULL)
 {
@@ -105,14 +112,14 @@ connected::connected()
 
 int connected::bind_inner(size_t min_len, size_t max_len, len_getter* lener)
 {
-	if (!min_len || !max_len || !lener || this->header_len || this->receiving)
+	if (!min_len || !max_len || !lener || this->header_len || this->receiving != tcp_receiving_ready)
 		return -1;
 	this->header_len = min_len;
 	this->size2 = max_len;
 	this->buf2 = reinterpret_cast<char*>(malloc(this->size2));
 	CHECK(this->buf2 != NULL);
 	this->lener = lener;
-	this->receiving = 3;
+	this->receiving = tcp_receiving_recv_by_seq;
 	CHECK(uv_read_start(reinterpret_cast<uv_stream_t*>(this->sock), connected::tcp_alloc_cb2, connected::tcp_recv_cb2) == 0);
 	return 0;
 }
@@ -159,7 +166,7 @@ unsigned long long connected::count_failed() const
 
 const void* connected::internal_buffer(size_t& len)
 {
-	CHECK(this->receiving == 3);
+	CHECK(this->receiving == tcp_receiving_recv_by_seq);
 	len = this->len2;
 	return this->buf2;
 }
@@ -212,7 +219,7 @@ bool connected::break_all_recv_by_seq(void* obj, void* odata)
 
 connected::~connected()
 {
-	if (this->receiving)
+	if (this->receiving != tcp_receiving_ready)
 		CHECK(uv_read_stop(reinterpret_cast<uv_stream_t*>(this->sock)) == 0);
 	if (this->async_cancel1)
 		uv_close(reinterpret_cast<uv_handle_t*>(this->async_cancel1), free_self_close_cb);
@@ -274,7 +281,7 @@ void connect::run()
 	else //AF_INET6
 		CHECK(uv_tcp_connect6(reinterpret_cast<uv_connect_t*>(this->req), reinterpret_cast<uv_tcp_t*>(this->handle.sock), this->addr, connected::tcp_connect_cb) == 0);
 	reinterpret_cast<uv_connect_t*>(this->req)->data = this;
-	(void)__task_yield(reinterpret_cast<event_task*>(this));
+	(void)__task_yield(this);
 }
 
 void connect::cancel()
@@ -355,7 +362,7 @@ void send::run()
 	uv_write_t req;
 	CHECK(uv_write(&req, reinterpret_cast<uv_stream_t*>(this->handle.sock), this->buf, this->num, connected::tcp_send_cb) == 0);
 	req.data = this;
-	(void)__task_yield(reinterpret_cast<event_task*>(this));
+	(void)__task_yield(this);
 }
 
 void send::cancel()
@@ -413,7 +420,7 @@ void connected::tcp_recv_cb0(uv_stream_t* handle, ssize_t nread, uv_buf_t buf)
 			if (obj->recv_queue0.empty())
 			{
 				CHECK(uv_read_stop(reinterpret_cast<uv_stream_t*>(obj->sock)) == 0);
-				obj->receiving = 0;
+				obj->receiving = tcp_receiving_ready;
 			}
 		}
 	}
@@ -428,23 +435,23 @@ recv::recv(int& ret, connected& handle, void* buf, size_t& len)
 void recv::run()
 {
 	CHECK(this->handle.broken == false);
-	CHECK(this->handle.receiving != 2);
-	if (!this->handle.receiving)
+	CHECK(this->handle.receiving != tcp_receiving_recv_till);
+	if (this->handle.receiving == tcp_receiving_ready)
 	{
-		this->handle.receiving = 1;
+		this->handle.receiving = tcp_receiving_recv;
 		CHECK(uv_read_start(reinterpret_cast<uv_stream_t*>(this->handle.sock), connected::tcp_alloc_cb0, connected::tcp_recv_cb0) == 0);
 	}
 	this->pos = this->handle.recv_queue0.insert(this->handle.recv_queue0.end(), this);
-	(void)__task_yield(reinterpret_cast<event_task*>(this));
+	(void)__task_yield(this);
 }
 
 void recv::cancel()
 {
 	this->handle.recv_queue0.erase(this->pos);
-	if (this->handle.receiving == 1 && this->handle.recv_queue0.empty())
+	if (this->handle.receiving == tcp_receiving_recv && this->handle.recv_queue0.empty())
 	{
 		CHECK(uv_read_stop(reinterpret_cast<uv_stream_t*>(this->handle.sock)) == 0);
-		this->handle.receiving = 0;
+		this->handle.receiving = tcp_receiving_ready;
 	}
 }
 
@@ -594,10 +601,10 @@ void recv_till::run()
 		this->ret = success;
 		return;
 	}
-	CHECK(this->handle.receiving == 0 || this->handle.receiving == 2);
-	if (!this->handle.receiving)
+	CHECK(this->handle.receiving == tcp_receiving_ready || this->handle.receiving == tcp_receiving_recv_till);
+	if (this->handle.receiving == tcp_receiving_ready)
 	{
-		this->handle.receiving = 2;
+		this->handle.receiving = tcp_receiving_recv_till;
 		CHECK(uv_read_start(reinterpret_cast<uv_stream_t*>(this->handle.sock), connected::tcp_alloc_cb1, connected::tcp_recv_cb1) == 0);
 		this->handle.async_cancel1 = malloc(sizeof(uv_async_t));
 		CHECK(this->handle.async_cancel1 != NULL);
@@ -605,7 +612,7 @@ void recv_till::run()
 		reinterpret_cast<uv_async_t*>(this->handle.async_cancel1)->data = &this->handle;
 	}
 	this->pos = this->handle.recv_queue1.insert(this->handle.recv_queue1.end(), this);
-	(void)__task_yield(reinterpret_cast<event_task*>(this));
+	(void)__task_yield(this);
 }
 
 void recv_till::cancel()
@@ -710,7 +717,7 @@ void connected::check_remaining(uv_handle_t* handle)
 	if (obj->recv_queue1.empty())
 	{
 		CHECK(uv_read_stop(reinterpret_cast<uv_stream_t*>(obj->sock)) == 0);
-		obj->receiving = 0;
+		obj->receiving = tcp_receiving_ready;
 		uv_close(reinterpret_cast<uv_handle_t*>(obj->async_cancel1), free_self_close_cb);
 		obj->async_cancel1 = NULL;
 	}
@@ -773,7 +780,7 @@ void connected::tcp_recv_cb2(uv_stream_t* handle, ssize_t nread, uv_buf_t buf)
 				else
 					rbs->len = obj->len2;
 				rbs->ret = success;
-				__task_stand(reinterpret_cast<event_task*>(rbs));
+				__task_stand(rbs);
 			}
 			else
 			{
@@ -797,19 +804,19 @@ void connected::tcp_recv_cb2(uv_stream_t* handle, ssize_t nread, uv_buf_t buf)
 			{
 ____tcp_recv_cb_rqne:
 				std::list<recv*>::iterator it = obj->recv_queue0.begin();
-				if ((*it)->buf)
+				recv* r = *it;
+				obj->recv_queue0.erase(it);
+				if (r->buf)
 				{
-					if ((*it)->len > obj->len2)
-						(*it)->len = obj->len2;
-					if ((*it)->len)
-						memcpy((*it)->buf, obj->buf2, (*it)->len);
+					if (r->len > obj->len2)
+						r->len = obj->len2;
+					if (r->len)
+						memcpy(r->buf, obj->buf2, r->len);
 				}
 				else
-					(*it)->len = obj->len2;
-				event_task* target = reinterpret_cast<event_task*>(*it);
-				(*it)->ret = success;
-				obj->recv_queue0.erase(it);
-				__task_stand(target);
+					r->len = obj->len2;
+				r->ret = success;
+				__task_stand(r);
 			}
 		}
 		if (obj == reinterpret_cast<connected*>(handle->data)) //Check valid
@@ -829,12 +836,12 @@ recv_by_seq_if::recv_by_seq_if(int& ret, connected& handle, void* buf, size_t& l
 void recv_by_seq_if::run_part_0()
 {
 	CHECK(this->handle.broken == false);
-	CHECK(this->handle.receiving == 3);
+	CHECK(this->handle.receiving == tcp_receiving_recv_by_seq);
 }
 
 void recv_by_seq_if::run_part_1()
 {
-	(void)__task_yield(reinterpret_cast<event_task*>(this));
+	(void)__task_yield(this);
 }
 
 recv_by_seq_if::~recv_by_seq_if()

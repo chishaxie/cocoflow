@@ -22,7 +22,7 @@ void sleep::run()
 	CHECK(uv_timer_init(loop(), reinterpret_cast<uv_timer_t*>(this->timer)) == 0);
 	reinterpret_cast<uv_timer_t*>(this->timer)->data = this;
 	CHECK(uv_timer_start(reinterpret_cast<uv_timer_t*>(this->timer), sleep_cb, this->timeout, 0) == 0);
-	if (!__task_yield(reinterpret_cast<event_task*>(this)))
+	if (!__task_yield(this))
 		return;
 	uv_close(reinterpret_cast<uv_handle_t*>(this->timer), free_self_close_cb);
 }
