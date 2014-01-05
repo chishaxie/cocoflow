@@ -232,27 +232,51 @@ private:
 	static std::map<long, sync*> ids;
 };
 
-/* success:(return>=0, *pos to address of seq, *len to length of seq), failure:(return<0) */
-typedef int seq_getter(const void* buf, size_t size, const void** pos, size_t* len);
-/* failure:(return<size) */
-typedef size_t len_getter(const void* buf, size_t size);
-typedef void pkg_seq_unrecv(const void* buf, size_t size, const void* seq, size_t len);
+/*
+ * Get sequence from packet
+ *     success:(return>=0, *seq to sequence), failure:(return<0)
+ * template<typename SeqType>
+ * typedef int seq_getter(const void* buf, size_t size, SeqType* seq);
+ */
+
+/*
+ * template<typename SeqType>
+ * typedef void pkg_seq_unrecv(const void* buf, size_t size, const SeqType& seq);
+ */
+
 typedef void pkg_seq_failed(const void* buf, size_t size, int ret);
+
+typedef size_t len_getter(const void* buf, size_t size); //failure:(return<size)
+
 typedef void pkg_ignored(const void* buf, size_t size, const struct sockaddr* addr);
 
-struct sequence
+class udp;
+namespace tcp {
+	class listening;
+	class connected;
+	class accept;
+	class connect;
+	class send;
+	class recv;
+	class recv_till;
+	class recv_by_seq_if;
+	template<typename SeqType> class recv_by_seq;
+}
+
+class seqer_wrapper_if
 {
-	const void* seq;
-	size_t len;
-	sequence() : seq(NULL), len(0) {}
-	sequence(const void* seq, size_t len) : seq(seq), len(len) {}
-	bool operator<(const sequence& other) const
-	{
-		if (this->len == other.len)
-			return memcmp(this->seq, other.seq, this->len) < 0;
-		else
-			return this->len < other.len;
-	}
+protected:
+	seqer_wrapper_if() {}
+	virtual ~seqer_wrapper_if() {}
+	virtual void insert(const void*, void*) = 0;
+	virtual void erase(const void*) = 0;
+	virtual int unwrap(const void*, size_t, void**) = 0;
+	virtual void call_unrecv(const void*, size_t) const = 0;
+	virtual void call_failed(const void*, size_t, int) const = 0;
+	virtual void drop_all(bool (*)(void*, void*), void*) = 0;
+	friend class udp;
+	friend class tcp::connected;
+	template<typename SeqType> friend class tcp::recv_by_seq;
 };
 
 class udp
@@ -294,36 +318,56 @@ public:
 		std::list<recv*>::iterator pos;
 		friend class udp;
 	};
-	class recv_by_seq : public event_task
+	class recv_by_seq_if : public event_task
 	{
 	public:
-		recv_by_seq(udp& handle, void* buf, size_t& len, const void* seq, size_t seq_len);
-		recv_by_seq(udp& handle, void* buf, size_t& len, uint32 seq);
-		virtual ~recv_by_seq();
+		recv_by_seq_if(udp& handle, void* buf, size_t& len);
+		virtual ~recv_by_seq_if();
 		uint16 peer_type();
 		struct sockaddr_in peer_addr_ipv4();
 		struct sockaddr_in6 peer_addr_ipv6();
+	protected:
+		recv_by_seq_if(const recv_by_seq_if&);
+		recv_by_seq_if& operator=(const recv_by_seq_if&);
+		void run_part_0();
+		void run_part_1();
+		udp& handle;
+		void* buf;
+		size_t& len;
+		struct sockaddr_in6 addr;
+		friend class udp;
+	};
+	template<typename SeqType = uint32>
+	class recv_by_seq : public recv_by_seq_if
+	{
+	public:
+		recv_by_seq(udp& handle, void* buf, size_t& len, const SeqType& seq)
+			: recv_by_seq_if(handle, buf, len), seq(seq) {}
+		virtual ~recv_by_seq() {}
 	private:
 		recv_by_seq(const recv_by_seq&);
 		recv_by_seq& operator=(const recv_by_seq&);
 		virtual void run();
 		virtual void cancel();
-		udp& handle;
-		void* buf;
-		size_t& len;
-		uint32 seq32;
-		sequence seq;
-		struct sockaddr_in6 addr;
-		std::multimap<sequence, recv_by_seq*>::iterator pos;
-		friend class udp;
+		const SeqType seq;
 	};
+	typedef recv_by_seq<> recv_by_seq_u32;
 	udp();
 	~udp();
 	int bind(const struct sockaddr_in& addr);
 	int bind(const struct sockaddr_in6& addr, bool ipv6_only = false);
-	int bind(seq_getter* seqer);
-	int bind(pkg_seq_unrecv* unrecv);
-	int bind(pkg_seq_failed* failed);
+	template<typename SeqType>
+	int bind(
+		int (*getter)(const void*, size_t, SeqType*), //seq_getter* getter
+		void (*unrecv)(const void*, size_t, const SeqType&) = NULL, //pkg_seq_unrecv* unrecv
+		pkg_seq_failed* failed = NULL
+	);
+	template<typename Compare, typename SeqType>
+	int bind(
+		int (*getter)(const void*, size_t, SeqType*), //seq_getter* getter
+		void (*unrecv)(const void*, size_t, const SeqType&) = NULL, //pkg_seq_unrecv* unrecv
+		pkg_seq_failed* failed = NULL
+	);
 	void ignore_recv(pkg_ignored* ignored = NULL);
 	unsigned long long count_unrecv() const;
 	unsigned long long count_failed() const;
@@ -335,15 +379,12 @@ private:
 	void* sock;
 	unsigned char receiving;
 	recv* cur_alloc;
-	seq_getter* seqer;
-	pkg_seq_unrecv* unrecv;
-	pkg_seq_failed* failed;
+	seqer_wrapper_if* seqer;
 	pkg_ignored* ignored;
 	unsigned long long c_unrecv;
 	unsigned long long c_failed;
 	unsigned long long c_ignored;
 	std::list<recv*> recv_queue;
-	std::multimap<sequence, recv_by_seq*> seq_mapping;
 	static char routing_buf[65536];
 	static size_t routing_len;
 	static uv_buf_t udp_alloc_cb0(uv_handle_t*, size_t);
@@ -390,20 +431,29 @@ private:
 	friend class accept;
 };
 
-class connect;
-class send;
-class recv;
-class recv_till;
-class recv_by_seq;
-
 class connected
 {
 public:
 	connected();
 	~connected();
-	int bind(size_t min_len, size_t max_len, len_getter* lener, seq_getter* seqer);
-	int bind(pkg_seq_unrecv* unrecv);
-	int bind(pkg_seq_failed* failed);
+	template<typename SeqType>
+	int bind(
+		size_t min_len,
+		size_t max_len,
+		len_getter* lener,
+		int (*getter)(const void*, size_t, SeqType*), //seq_getter* getter
+		void (*unrecv)(const void*, size_t, const SeqType&) = NULL, //pkg_seq_unrecv* unrecv
+		pkg_seq_failed* failed = NULL
+	);
+	template<typename Compare, typename SeqType>
+	int bind(
+		size_t min_len,
+		size_t max_len,
+		len_getter* lener,
+		int (*getter)(const void*, size_t, SeqType*), //seq_getter* getter
+		void (*unrecv)(const void*, size_t, const SeqType&) = NULL, //pkg_seq_unrecv* unrecv
+		pkg_seq_failed* failed = NULL
+	);
 	uint16 peer_type();
 	struct sockaddr_in peer_addr_ipv4();
 	struct sockaddr_in6 peer_addr_ipv6();
@@ -413,13 +463,13 @@ public:
 private:
 	connected(const connected&);
 	connected& operator=(const connected&);
+	int bind_inner(size_t, size_t, len_getter*);
 	void* sock;
 	bool established;
 	bool broken;
 	unsigned char receiving;
 	std::list<recv*> recv_queue0;
 	std::list<recv_till*> recv_queue1;
-	std::multimap<sequence, recv_by_seq*> seq_mapping;
 	recv* cur_alloc0;
 	recv_till* cur_alloc1;
 	char* buf1;
@@ -431,9 +481,7 @@ private:
 	size_t header_len;
 	size_t packet_len;
 	len_getter* lener;
-	seq_getter* seqer;
-	pkg_seq_unrecv* unrecv;
-	pkg_seq_failed* failed;
+	seqer_wrapper_if* seqer;
 	unsigned long long c_unrecv;
 	unsigned long long c_failed;
 	void* async_cancel1;
@@ -448,12 +496,14 @@ private:
 	static void tcp_fallback_cb1(uv_async_t*, int);
 	static void check_remaining(uv_handle_t*);
 	static void break_all_recv(uv_handle_t*, int);
+	static bool break_all_recv_by_seq(void*, void*);
 	friend class listening;
 	friend class connect;
 	friend class send;
 	friend class recv;
 	friend class recv_till;
-	friend class recv_by_seq;
+	friend class recv_by_seq_if;
+	template<typename SeqType> friend class recv_by_seq;
 };
 
 class accept : public event_task
@@ -553,26 +603,39 @@ private:
 	friend class connected;
 };
 
-class recv_by_seq : public event_task
+class recv_by_seq_if : public event_task
 {
 public:
-	recv_by_seq(int& ret, connected& handle, void* buf, size_t& len, const void* seq, size_t seq_len);
-	recv_by_seq(int& ret, connected& handle, void* buf, size_t& len, uint32 seq);
-	virtual ~recv_by_seq();
+	recv_by_seq_if(int& ret, connected& handle, void* buf, size_t& len);
+	virtual ~recv_by_seq_if();
+protected:
+	recv_by_seq_if(const recv_by_seq_if&);
+	recv_by_seq_if& operator=(const recv_by_seq_if&);
+	void run_part_0();
+	void run_part_1();
+	int& ret;
+	connected& handle;
+	void* buf;
+	size_t& len;
+	friend class connected;
+};
+
+template<typename SeqType = uint32>
+class recv_by_seq : public recv_by_seq_if
+{
+public:
+	recv_by_seq(int& ret, connected& handle, void* buf, size_t& len, const SeqType& seq)
+		: recv_by_seq_if(ret, handle, buf, len), seq(seq) {}
+	virtual ~recv_by_seq() {}
 private:
 	recv_by_seq(const recv_by_seq&);
 	recv_by_seq& operator=(const recv_by_seq&);
 	virtual void run();
 	virtual void cancel();
-	int& ret;
-	connected& handle;
-	void* buf;
-	size_t& len;
-	uint32 seq32;
-	sequence seq;
-	std::multimap<sequence, recv_by_seq*>::iterator pos;
-	friend class connected;
+	const SeqType seq;
 };
+
+typedef recv_by_seq<> recv_by_seq_u32;
 
 } /* end of namespace tcp */
 
@@ -842,6 +905,161 @@ any_of::any_of(task<UP0, PP0>& target0, task<UP1, PP1>& target1, task<UP2, PP2>&
 	this->children[3] = reinterpret_cast<event_task*>(&target3);
 	this->children[4] = reinterpret_cast<event_task*>(&target4);
 	this->children[5] = reinterpret_cast<event_task*>(&target5);
+}
+
+template<typename SeqType, typename Compare>
+class seqer_wrapper : public seqer_wrapper_if
+{
+protected:
+	seqer_wrapper(
+		int  (*getter)(const void*, size_t, SeqType*),
+		void (*unrecv)(const void*, size_t, const SeqType&),
+		void (*failed)(const void*, size_t, int)
+	) : cur_seq(), getter(getter), unrecv(unrecv), failed(failed) {}
+	virtual ~seqer_wrapper() {}
+	virtual void insert(const void* seq, void* obj)
+	{
+		(void)this->seq_mapping.insert(std::pair<SeqType, void*>(*reinterpret_cast<const SeqType*>(seq), obj));
+	}
+	virtual void erase(const void* seq)
+	{
+		(void)this->seq_mapping.erase(*reinterpret_cast<const SeqType*>(seq));
+	}
+	virtual int unwrap(const void* buf, size_t size, void** obj)
+	{
+		int ret = this->getter(buf, size, &this->cur_seq);
+		if (ret >= 0)
+		{
+			typename std::multimap<SeqType, void*, Compare>::iterator it = this->seq_mapping.find(this->cur_seq);
+			if (it != this->seq_mapping.end())
+			{
+				*obj = it->second;
+				(void)this->seq_mapping.erase(it);
+				return ret;
+			}
+		}
+		*obj = NULL;
+		return ret;
+	}
+	virtual void call_unrecv(const void* buf, size_t size) const
+	{
+		if (this->unrecv)
+			this->unrecv(buf, size, this->cur_seq);
+	}
+	virtual void call_failed(const void* buf, size_t size, int ret) const
+	{
+		if (this->failed)
+			this->failed(buf, size, ret);
+	}
+	virtual void drop_all(bool (*cb)(void*, void*), void* data)
+	{
+		for (typename std::multimap<SeqType, void*, Compare>::iterator it = this->seq_mapping.begin(); it != this->seq_mapping.end(); )
+		{
+			void* obj = it->second;
+			this->seq_mapping.erase(it++);
+			if (cb(obj, data))
+				break;
+		}
+	}
+private:
+	std::multimap<SeqType, void*, Compare> seq_mapping;
+	SeqType cur_seq;
+	int  (*getter)(const void*, size_t, SeqType*);
+	void (*unrecv)(const void*, size_t, const SeqType&);
+	void (*failed)(const void*, size_t, int);
+	friend class udp;
+	friend class tcp::connected;
+	friend class tcp::recv_by_seq<SeqType>;
+};
+
+template<typename SeqType>
+int udp::bind(
+	int  (*getter)(const void*, size_t, SeqType*),
+	void (*unrecv)(const void*, size_t, const SeqType&),
+	void (*failed)(const void*, size_t, int)
+)
+{
+	if (!getter || this->seqer)
+		return -1;
+	this->seqer = new seqer_wrapper< SeqType, std::less<SeqType> >(getter, unrecv, failed);
+	return 0;
+}
+
+template<typename Compare, typename SeqType>
+int udp::bind(
+	int  (*getter)(const void*, size_t, SeqType*),
+	void (*unrecv)(const void*, size_t, const SeqType&),
+	void (*failed)(const void*, size_t, int)
+)
+{
+	if (!getter || this->seqer)
+		return -1;
+	this->seqer = new seqer_wrapper<SeqType, Compare>(getter, unrecv, failed);
+	return 0;
+}
+
+template<typename SeqType>
+void udp::recv_by_seq<SeqType>::run()
+{
+	this->run_part_0();
+	this->handle.seqer->insert(&this->seq, this);
+	this->run_part_1();
+}
+
+template<typename SeqType>
+void udp::recv_by_seq<SeqType>::cancel()
+{
+	this->handle.seqer->erase(&this->seq);
+}
+
+namespace tcp {
+
+template<typename SeqType>
+int connected::bind(
+	size_t min_len,
+	size_t max_len,
+	len_getter* lener,
+	int  (*getter)(const void*, size_t, SeqType*),
+	void (*unrecv)(const void*, size_t, const SeqType&),
+	void (*failed)(const void*, size_t, int)
+)
+{
+	if (!getter || this->seqer)
+		return -1;
+	this->seqer = new seqer_wrapper< SeqType, std::less<SeqType> >(getter, unrecv, failed);
+	return this->bind_inner(min_len, max_len, lener);
+}
+
+template<typename Compare, typename SeqType>
+int connected::bind(
+	size_t min_len,
+	size_t max_len,
+	len_getter* lener,
+	int  (*getter)(const void*, size_t, SeqType*),
+	void (*unrecv)(const void*, size_t, const SeqType&),
+	void (*failed)(const void*, size_t, int)
+)
+{
+	if (!getter || this->seqer)
+		return -1;
+	this->seqer = new seqer_wrapper<SeqType, Compare>(getter, unrecv, failed);
+	return this->bind_inner(min_len, max_len, lener);
+}
+
+template<typename SeqType>
+void recv_by_seq<SeqType>::run()
+{
+	this->run_part_0();
+	this->handle.seqer->insert(&this->seq, this);
+	this->run_part_1();
+}
+
+template<typename SeqType>
+void recv_by_seq<SeqType>::cancel()
+{
+	this->handle.seqer->erase(&this->seq);
+}
+
 }
 
 #undef _task_tpl

@@ -96,40 +96,24 @@ accept::~accept()
 connected::connected()
 	: sock(malloc(sizeof(uv_tcp_t))), established(false), broken(false), receiving(0), cur_alloc0(NULL), cur_alloc1(NULL),
 	  buf1(NULL), size1(0), len1(0), buf2(NULL), size2(0), len2(0), header_len(0), packet_len(0),
-	  lener(NULL), seqer(NULL), unrecv(NULL), failed(NULL), c_unrecv(0), c_failed(0), async_cancel1(NULL)
+	  lener(NULL), seqer(NULL), c_unrecv(0), c_failed(0), async_cancel1(NULL)
 {
 	CHECK(this->sock != NULL);
 	CHECK(uv_tcp_init(loop(), reinterpret_cast<uv_tcp_t*>(this->sock)) == 0);
 	reinterpret_cast<uv_tcp_t*>(this->sock)->data = this;
 }
 
-int connected::bind(size_t min_len, size_t max_len, len_getter* lener, seq_getter* seqer)
+int connected::bind_inner(size_t min_len, size_t max_len, len_getter* lener)
 {
-	if (!min_len || !max_len || !lener || !seqer || this->header_len || this->receiving)
+	if (!min_len || !max_len || !lener || this->header_len || this->receiving)
 		return -1;
 	this->header_len = min_len;
 	this->size2 = max_len;
 	this->buf2 = reinterpret_cast<char*>(malloc(this->size2));
 	CHECK(this->buf2 != NULL);
 	this->lener = lener;
-	this->seqer = seqer;
 	this->receiving = 3;
 	CHECK(uv_read_start(reinterpret_cast<uv_stream_t*>(this->sock), connected::tcp_alloc_cb2, connected::tcp_recv_cb2) == 0);
-	return 0;
-}
-
-int connected::bind(pkg_seq_unrecv* unrecv)
-{
-	if (!unrecv || this->unrecv)
-		return -1;
-	this->unrecv = unrecv;
-	return 0;
-}
-
-int connected::bind(pkg_seq_failed* failed)
-{
-	if (!failed || this->failed)
-	this->failed = failed;
 	return 0;
 }
 
@@ -180,6 +164,12 @@ const void* connected::internal_buffer(size_t& len)
 	return this->buf2;
 }
 
+typedef struct 
+{
+	uv_handle_t* handle;
+	int err;
+} drop_all_cb_data;
+
 void connected::break_all_recv(uv_handle_t* handle, int err)
 {
 	connected* obj = reinterpret_cast<connected*>(handle->data);
@@ -201,15 +191,23 @@ void connected::break_all_recv(uv_handle_t* handle, int err)
 		if (obj != reinterpret_cast<connected*>(handle->data))
 			return;
 	}
-	for (std::multimap<sequence, recv_by_seq*>::iterator it = obj->seq_mapping.begin(); it != obj->seq_mapping.end(); )
-	{
-		it->second->ret = err;
-		event_task* target = it->second;
-		obj->seq_mapping.erase(it++);
-		__task_stand(target);
-		if (obj != reinterpret_cast<connected*>(handle->data))
-			return;
-	}
+	drop_all_cb_data data;
+	data.handle = handle;
+	data.err = err;
+	obj->seqer->drop_all(connected::break_all_recv_by_seq, &data);
+}
+
+bool connected::break_all_recv_by_seq(void* obj, void* odata)
+{
+	recv_by_seq_if* rbs = reinterpret_cast<recv_by_seq_if*>(obj);
+	drop_all_cb_data* data = reinterpret_cast<drop_all_cb_data*>(odata);
+	void* record = data->handle->data;
+	rbs->ret = data->err;
+	__task_stand(rbs);
+	if (record != data->handle->data)
+		return true;
+	else
+		return false;
 }
 
 connected::~connected()
@@ -224,6 +222,8 @@ connected::~connected()
 		free(this->buf1);
 	if (this->buf2)
 		free(this->buf2);
+	if (this->seqer)
+		delete this->seqer;
 }
 
 /***** tcp.connect *****/
@@ -757,34 +757,30 @@ void connected::tcp_recv_cb2(uv_stream_t* handle, ssize_t nread, uv_buf_t buf)
 	}
 	if (obj->packet_len && obj->len2 == obj->packet_len)
 	{
-		sequence seq(NULL, 0);
-		int ret = obj->seqer(obj->buf2, obj->len2, &seq.seq, &seq.len);
+		recv_by_seq_if* rbs;
+		int ret = obj->seqer->unwrap(obj->buf2, obj->len2, reinterpret_cast<void**>(&rbs));
 		if (ret >= 0)
 		{
-			std::multimap<sequence, recv_by_seq*>::iterator it = obj->seq_mapping.find(seq);
-			if (it != obj->seq_mapping.end())
+			if (rbs != NULL)
 			{
-				if (it->second->buf)
+				if (rbs->buf)
 				{
-					if (it->second->len > obj->len2)
-						it->second->len = obj->len2;
-					if (it->second->len)
-						memcpy(it->second->buf, obj->buf2, it->second->len);
+					if (rbs->len > obj->len2)
+						rbs->len = obj->len2;
+					if (rbs->len)
+						memcpy(rbs->buf, obj->buf2, rbs->len);
 				}
 				else
-					it->second->len = obj->len2;
-				event_task* target = reinterpret_cast<event_task*>(it->second);
-				it->second->ret = success;
-				obj->seq_mapping.erase(it);
-				__task_stand(target);
+					rbs->len = obj->len2;
+				rbs->ret = success;
+				__task_stand(reinterpret_cast<event_task*>(rbs));
 			}
 			else
 			{
 				if (obj->recv_queue0.empty())
 				{
 					obj->c_unrecv ++;
-					if (obj->unrecv)
-						obj->unrecv(obj->buf2, obj->len2, seq.seq, seq.len);
+					obj->seqer->call_unrecv(obj->buf2, obj->len2);
 				}
 				else
 					goto ____tcp_recv_cb_rqne;
@@ -795,8 +791,7 @@ void connected::tcp_recv_cb2(uv_stream_t* handle, ssize_t nread, uv_buf_t buf)
 			if (obj->recv_queue0.empty())
 			{
 				obj->c_failed ++;
-				if (obj->failed)
-					obj->failed(obj->buf2, obj->len2, ret);
+				obj->seqer->call_failed(obj->buf2, obj->len2, ret);
 			}
 			else
 			{
@@ -825,33 +820,24 @@ ____tcp_recv_cb_rqne:
 	}
 }
 
-recv_by_seq::recv_by_seq(int& ret, connected& handle, void* buf, size_t& len, const void* seq, size_t seq_len)
-	: ret(ret), handle(handle), buf(buf), len(len), seq(seq, seq_len)
-{
-	CHECK(seq != NULL && seq_len > 0);
-	this->ret = unfinished;
-}
-
-recv_by_seq::recv_by_seq(int& ret, connected& handle, void* buf, size_t& len, uint32 seq)
-	: ret(ret), handle(handle), buf(buf), len(len), seq32(seq), seq(reinterpret_cast<const void*>(&this->seq32), sizeof(this->seq32))
+recv_by_seq_if::recv_by_seq_if(int& ret, connected& handle, void* buf, size_t& len)
+	: ret(ret), handle(handle), buf(buf), len(len)
 {
 	this->ret = unfinished;
 }
 
-void recv_by_seq::run()
+void recv_by_seq_if::run_part_0()
 {
 	CHECK(this->handle.broken == false);
 	CHECK(this->handle.receiving == 3);
-	this->pos = this->handle.seq_mapping.insert(std::pair<sequence, recv_by_seq*>(this->seq, this));
+}
+
+void recv_by_seq_if::run_part_1()
+{
 	(void)__task_yield(reinterpret_cast<event_task*>(this));
 }
 
-void recv_by_seq::cancel()
-{
-	this->handle.seq_mapping.erase(this->pos);
-}
-
-recv_by_seq::~recv_by_seq()
+recv_by_seq_if::~recv_by_seq_if()
 {
 }
 

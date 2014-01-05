@@ -47,12 +47,11 @@ class echo_task: public ccf::user_task
 	}
 };
 
-int get_seq_from_buf(const void* buf, size_t size, const void** pos, size_t* len)
+int get_seq_from_buf(const void* buf, size_t size, ccf::uint32* seq)
 {
 	if (size < sizeof(ccf::uint32))
 		return -1;
-	*pos = buf;
-	*len = sizeof(ccf::uint32);
+	*seq = ntohl(*(ccf::uint32*)buf);
 	return 0;
 }
 
@@ -64,17 +63,18 @@ class seq_task: public ccf::user_task
 		char buf[65536];
 		struct sockaddr_in target = ccf::ip_to_addr("127.0.0.1", TEST_PORT);
 		ASSERT(u.bind(get_seq_from_buf) == 0);
-		ccf::uint32 *seq = (ccf::uint32 *)buf;
 		for (int i=0; i<TEST_TIMES; i++)
 		{
-			*seq = i;
+			ccf::uint32 seq = i;
+			ccf::uint32 *pos = (ccf::uint32 *)buf;
+			*pos = htonl(seq);
 			ccf::udp::send us(u, target, buf, sizeof(ccf::uint32) + i);
 			await(us);
-			cout << "seq_task send " << sizeof(ccf::uint32) + i << ", seq = " << *seq << endl;
+			cout << "seq_task send " << sizeof(ccf::uint32) + i << ", seq = " << seq << endl;
 			size_t len = sizeof(buf);
-			ccf::udp::recv_by_seq ur(u, buf, len, *seq);
+			ccf::udp::recv_by_seq_u32 ur(u, buf, len, seq);
 			await(ur);
-			cout << "seq_task recv " << len << ", seq = " << *seq << endl;
+			cout << "seq_task recv " << len << ", seq = " << seq << endl;
 		}
 	}
 };

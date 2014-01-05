@@ -55,12 +55,11 @@ public:
 int echo_task::times = 0;
 ccf::udp echo_task::u;
 
-int get_seq_from_buf(const void* buf, size_t size, const void** pos, size_t* len)
+int get_seq_from_buf(const void* buf, size_t size, ccf::uint32* seq)
 {
 	if (size < sizeof(ccf::uint32))
 		return -1;
-	*pos = buf;
-	*len = sizeof(ccf::uint32);
+	*seq = ntohl(*(ccf::uint32*)buf);
 	return 0;
 }
 
@@ -74,11 +73,11 @@ class seq_task: public test_task
 	{
 		char buf[4096];
 		ccf::uint32 *pos = (ccf::uint32 *)buf;
-		*pos = this->seq;
+		*pos = htonl(this->seq);
 		ccf::udp::send us(seq_task::u, seq_task::target, buf, sizeof(ccf::uint32));
 		await(us);
 		size_t len = sizeof(buf);
-		ccf::udp::recv_by_seq ur(seq_task::u, buf, len, this->seq);
+		ccf::udp::recv_by_seq_u32 ur(seq_task::u, buf, len, this->seq);
 		await(ur);
 		if (++seq_task::times == TEST_TIMES)
 		{

@@ -33,12 +33,11 @@ size_t get_len_from_header(const void* buf, size_t size)
 	return *len;
 }
 
-int get_seq_from_buf(const void* buf, size_t size, const void** pos, size_t* len)
+int get_seq_from_buf(const void* buf, size_t size, ccf::uint32* seq)
 {
 	if (size < sizeof(ccf::uint32) + sizeof(ccf::uint32))
 		return -1;
-	*pos = (const char *)buf + sizeof(ccf::uint32);
-	*len = sizeof(ccf::uint32);
+	*seq = ntohl(*(((ccf::uint32*)buf) + 1));
 	return 0;
 }
 
@@ -104,12 +103,12 @@ class seq_task: public test_task
 		ccf::uint32 *plen = (ccf::uint32 *)buf;
 		ccf::uint32 *pseq = ((ccf::uint32 *)buf) + 1;
 		*plen = simple_rand()%128 + 8;
-		*pseq = this->seq;
+		*pseq = htonl(this->seq);
 		ccf::tcp::send ts(ret, seq_task::tc, buf, *plen);
 		await(ts);
 		ASSERT(ret == ccf::tcp::success);
 		size_t len = sizeof(buf);
-		ccf::tcp::recv_by_seq tr(ret, seq_task::tc, buf, len, this->seq);
+		ccf::tcp::recv_by_seq_u32 tr(ret, seq_task::tc, buf, len, this->seq);
 		await(tr);
 		ASSERT(ret == ccf::tcp::success);
 		if (++seq_task::times == TEST_TIMES)

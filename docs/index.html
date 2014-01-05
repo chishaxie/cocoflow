@@ -290,39 +290,41 @@ public:
 </ul>
 <h2 id="网络事件相关回调函数">3.3. 网络事件相关回调函数</h2>
 <h3 id="section-16"></h3>
-<pre><code>typedef int seq_getter(const void* buf, size_t size, const void** pos, size_t* len);</code></pre>
+<pre><code>template&lt;typename SeqType&gt;
+typedef int seq_getter(const void* buf, size_t size, SeqType* seq);</code></pre>
 <ul>
 <li>序列号获取回调函数(udp/tcp)</li>
+<li>注：上面的写法实际上<strong>C++语法不支持</strong>(仅供理解)</li>
 <li>buf 数据包起点指针(传入参数)</li>
 <li>size 数据包长度(传入参数)</li>
-<li>pos *pos需要指向序列号的起点位置(传出参数)</li>
-<li>len *len需要等于序列号的长度(传出参数)</li>
+<li>seq *seq需要赋上序列号的值(传出参数)</li>
 <li>返回: &gt;=0,成功 &lt;0,失败</li>
 </ul>
 <h3 id="section-17"></h3>
-<pre><code>typedef size_t len_getter(const void* buf, size_t size);</code></pre>
-<ul>
-<li>包长度获取回调函数(tcp,通过包头获取整个包的长度)</li>
-<li>buf 数据包起点指针(传入参数)</li>
-<li>size 数据包头长度(传入参数)</li>
-<li>返回: 数据包的长度(若小于包头长度或大于最大长度都视为错误)</li>
-</ul>
-<h3 id="section-18"></h3>
-<pre><code>typedef void pkg_seq_unrecv(const void* buf, size_t size, const void* seq, size_t len);</code></pre>
+<pre><code>template&lt;typename SeqType&gt;
+typedef void pkg_seq_unrecv(const void* buf, size_t size, const SeqType&amp; seq);</code></pre>
 <ul>
 <li>数据包该seq未被recv回调函数(udp/tcp)</li>
+<li>注：上面的写法实际上<strong>C++语法不支持</strong>(仅供理解)</li>
 <li>buf 数据包起点指针(传入参数)</li>
 <li>size 数据包头长度(传入参数)</li>
-<li>seq 序列号的起点指针(传入参数)</li>
-<li>len 序列号的长度(传入参数)</li>
+<li>seq 序列号(传入参数)</li>
 </ul>
-<h3 id="section-19"></h3>
+<h3 id="section-18"></h3>
 <pre><code>typedef void pkg_seq_failed(const void* buf, size_t size, int ret);</code></pre>
 <ul>
 <li>数据包seq获取失败回调函数(udp/tcp)</li>
 <li>buf 数据包起点指针(传入参数)</li>
 <li>size 数据包头长度(传入参数)</li>
 <li>ret 获取seq失败时的返回码</li>
+</ul>
+<h3 id="section-19"></h3>
+<pre><code>typedef size_t len_getter(const void* buf, size_t size);</code></pre>
+<ul>
+<li>包长度获取回调函数(tcp,通过包头获取整个包的长度)</li>
+<li>buf 数据包起点指针(传入参数)</li>
+<li>size 数据包头长度(传入参数)</li>
+<li>返回: 数据包的长度(若小于包头长度或大于最大长度都视为错误)</li>
 </ul>
 <h3 id="section-20"></h3>
 <pre><code>typedef void pkg_ignored(const void* buf, size_t size, const struct sockaddr* addr);</code></pre>
@@ -341,9 +343,10 @@ public:
     ~udp();
     int bind(const struct sockaddr_in&amp; addr);
     int bind(const struct sockaddr_in6&amp; addr, bool ipv6_only = false);
-    int bind(seq_getter* seqer);
-    int bind(pkg_seq_unrecv* unrecv);
-    int bind(pkg_seq_failed* failed);
+    template&lt;typename SeqType&gt;
+    int bind(seq_getter* getter, pkg_seq_unrecv* unrecv = NULL, pkg_seq_failed* failed = NULL);
+    template&lt;typename Compare, typename SeqType&gt;
+    int bind(seq_getter* getter, pkg_seq_unrecv* unrecv = NULL, pkg_seq_failed* failed = NULL);
     void ignore_recv(pkg_ignored* ignored = NULL);
     unsigned long long count_unrecv() const;
     unsigned long long count_failed() const;
@@ -355,9 +358,11 @@ public:
 <li>udp对象逻辑上和一个udp fd对应</li>
 <li><code>int bind(const struct sockaddr_in&amp; addr);</code> 绑定IPv4地址(若不绑定则使用随机端口),返回0成功</li>
 <li><code>int bind(const struct sockaddr_in6&amp; addr, bool ipv6_only = false);</code> 绑定IPv6地址(若不绑定则使用随机端口),返回0成功</li>
-<li><code>int bind(seq_getter* seqer);</code> 绑定序列号获取回调函数(全部udp收包都需要调用该函数),返回0成功</li>
-<li><code>int bind(pkg_seq_unrecv* unrecv);</code> 绑定序列号未被recv的回调函数,返回0成功</li>
-<li><code>int bind(pkg_seq_failed* failed);</code> 绑定序列号获取失败的回调函数,返回0成功</li>
+<li><code>int bind(seq_getter* getter, pkg_seq_unrecv* unrecv = NULL, pkg_seq_failed* failed = NULL);</code> 绑定<strong>seqer</strong>,返回0成功</li>
+<li>getter 序列号获取回调函数(全部udp收包都需要调用该函数)</li>
+<li>unrecv 序列号未被recv的回调函数</li>
+<li>failed 序列号获取失败的回调函数</li>
+<li>该函数为模板函数,其中序列号的类型为模板类型(即任意类型),另可额外设置序列号类型的比较函数(如bind<Compare>(...))</li>
 <li><code>void ignore_recv(pkg_ignored* ignored = NULL);</code> 忽略全部收包(用于不关注回包的场合,回调函数可用于日志监控等)</li>
 <li><code>unsigned long long count_unrecv() const;</code> 获取当前序列号未被recv的计数</li>
 <li><code>unsigned long long count_failed() const;</code> 获取当前获得序列号失败的计数</li>
@@ -402,11 +407,11 @@ public:
 <li><code>struct sockaddr_in6 peer_addr_ipv6();</code> 获取对端IPv6地址(需确保对端类型为AF_INET6)</li>
 </ul>
 <h3 id="udprecv_by_seq-接收通过seq">udp::recv_by_seq 接收(通过seq)</h3>
-<pre><code>class recv_by_seq : public event_task
+<pre><code>template&lt;typename SeqType = uint32&gt;
+class recv_by_seq : public event_task
 {
 public:
-    recv_by_seq(udp&amp; handle, void* buf, size_t&amp; len, const void* seq, size_t seq_len);
-    recv_by_seq(udp&amp; handle, void* buf, size_t&amp; len, uint32 seq);
+    recv_by_seq(udp&amp; handle, void* buf, size_t&amp; len, const SeqType&amp; seq);
     virtual ~recv_by_seq();
     uint16 peer_type();
     struct sockaddr_in peer_addr_ipv4();
@@ -414,7 +419,8 @@ public:
 }</code></pre>
 <ul>
 <li>注: 该类是udp类的内部public类</li>
-<li>构造函数参数分别为udp对象,数据包起点,数据包长度(传入传出参数),序列号(地址+长度版本或uint32版本)</li>
+<li>注：该类是模板类,其序列号为模板类型(即任意类型),需保证其序列号类型和udp对象绑定<strong>seqer</strong>的序列号<strong>类型一致</strong></li>
+<li>构造函数参数分别为udp对象,数据包起点,数据包长度(传入传出参数),序列号</li>
 <li>使用该task前必须为udp对象<strong>绑定seqer</strong></li>
 <li>该task会等待udp对象中的fd可读时接收数据包并获取匹配seq并写到buf中</li>
 <li>buf参数可以为NULL,内部Buffer接收后将不会拷贝到buf上,可通过udp::internal_buffer函数获取Buffer</li>
@@ -448,9 +454,10 @@ public:
 public:
     connected();
     ~connected();
-    int bind(size_t min_len, size_t max_len, len_getter* lener, seq_getter* seqer);
-    int bind(pkg_seq_unrecv* unrecv);
-    int bind(pkg_seq_failed* failed);
+    template&lt;typename SeqType&gt;
+    int bind(size_t min_len, size_t max_len, len_getter* lener, seq_getter* seqer, pkg_seq_unrecv* unrecv = NULL, pkg_seq_failed* failed = NULL);
+    template&lt;typename Compare, typename SeqType&gt;
+    int bind(size_t min_len, size_t max_len, len_getter* lener, seq_getter* seqer, pkg_seq_unrecv* unrecv = NULL, pkg_seq_failed* failed = NULL);
     uint16 peer_type();
     struct sockaddr_in peer_addr_ipv4();
     struct sockaddr_in6 peer_addr_ipv6();
@@ -462,14 +469,15 @@ public:
 <li>注: connected类不是task的子类</li>
 <li>connected对象逻辑上和一个tcp connect fd对应</li>
 <li>使用connected对象通信前必须保证连接建立成功(通过<strong>tcp::accept</strong>或<strong>tcp::connect</strong>)</li>
-<li><code>int bind(size_t min_len, size_t max_len, len_getter* lener, seq_getter* seqer);</code> 绑定<strong>单连接异步数据通道模型</strong>,返回0成功</li>
+<li><code>int bind(size_t min_len, size_t max_len, len_getter* lener, seq_getter* seqer, pkg_seq_unrecv* unrecv, pkg_seq_failed* failed);</code> 绑定<strong>单连接异步数据通道模型</strong>,返回0成功</li>
 <li>使用该函数意味着该连接上通信的数据是乱序的数据包构成的,每个包拥有其独立的seq(<strong>流</strong>将被切割成<strong>包</strong>)</li>
 <li>min_len 数据包的最小长度(一般是包头长度,其中需要包含表示整个包长度的字段)</li>
 <li>max_len 数据包的最大产度(主要受限于内存分配)</li>
 <li>lener 包长度获取回调函数(通过包头获取整个包的长度)</li>
 <li>seqer 序列号获取回调函数</li>
-<li><code>int bind(pkg_seq_unrecv* unrecv);</code> 绑定序列号未被recv的回调函数,返回0成功</li>
-<li><code>int bind(pkg_seq_failed* failed);</code> 绑定序列号获取失败的回调函数,返回0成功</li>
+<li>unrecv 序列号未被recv的回调函数</li>
+<li>failed 序列号获取失败的回调函数</li>
+<li>该函数为模板函数,其中序列号的类型为模板类型(即任意类型),另可额外设置序列号类型的比较函数(如bind<Compare>(...))</li>
 <li><code>uint16 peer_type();</code> 获取对端类型(返回AF_INET/AF_INET6)</li>
 <li><code>struct sockaddr_in peer_addr_ipv4();</code> 获取对端IPv4地址(需确保对端类型为AF_INET)</li>
 <li><code>struct sockaddr_in6 peer_addr_ipv6();</code> 获取对端IPv6地址(需确保对端类型为AF_INET6)</li>
@@ -573,15 +581,16 @@ public:
 <li>若返回码为失败/错误,那么意味着该connected对象坏掉了,只能析构对象(close fd)了</li>
 </ul>
 <h3 id="tcprecv_by_seq">tcp::recv_by_seq</h3>
-<pre><code>class recv_by_seq : public event_task
+<pre><code>template&lt;typename SeqType = uint32&gt;
+class recv_by_seq : public event_task
 {
 public:
-    recv_by_seq(int&amp; ret, connected&amp; handle, void* buf, size_t&amp; len, const void* seq, size_t seq_len);
-    recv_by_seq(int&amp; ret, connected&amp; handle, void* buf, size_t&amp; len, uint32 seq);
+    recv_by_seq(int&amp; ret, connected&amp; handle, void* buf, size_t&amp; len, const SeqType&amp; seq);
     virtual ~recv_by_seq();
 }</code></pre>
 <ul>
-<li>构造函数参数分别为返回码,connected对象,数据包起点,数据包长度(传入传出参数),序列号(地址+长度/uint32)</li>
+<li>注：该类是模板类,其序列号为模板类型(即任意类型),需保证其序列号类型和connected对象绑定<strong>单连接异步数据通道模型</strong>的序列号<strong>类型一致</strong></li>
+<li>构造函数参数分别为返回码,connected对象,数据包起点,数据包长度(传入传出参数),序列号</li>
 <li>使用该task前必须为connected对象绑定<strong>单连接异步数据通道模型</strong></li>
 <li>该task会等待connected对象中的fd可读时,接收数据包切割分段并获取匹配seq并写到buf中</li>
 <li>buf参数可以为NULL,内部Buffer接收后将不会拷贝到buf上,可通过connected.internal_buffer函数获取Buffer</li>
@@ -605,18 +614,23 @@ public:
 <li>例如: struct sockaddr_in6 addr = ip_to_addr6(&quot;::1&quot;, 1337);</li>
 </ul>
 <h3 id="section-24"></h3>
+<pre><code>std::string ip_to_str(const struct sockaddr* addr);</code></pre>
+<ul>
+<li>IPv4/IPv6地址sockaddr对象转std::string描述(内部会判断sockaddr_in/sockaddr_in6)</li>
+</ul>
+<h3 id="section-25"></h3>
 <pre><code>std::string ip_to_str(const struct sockaddr_in &amp;addr);</code></pre>
 <ul>
 <li>IPv4地址sockaddr_in对象转std::string描述</li>
 <li>例如: ip_to_str(addr); //结果为&quot;127.0.0.1:1337&quot;</li>
 </ul>
-<h3 id="section-25"></h3>
+<h3 id="section-26"></h3>
 <pre><code>std::string ip_to_str(const struct sockaddr_in6&amp; addr);</code></pre>
 <ul>
 <li>IPv6地址sockaddr_in6对象转std::string描述</li>
 <li>例如: ip_to_str(addr); //结果为&quot;[::1]:1337&quot;</li>
 </ul>
-<h3 id="section-26"></h3>
+<h3 id="section-27"></h3>
 <pre><code>void set_debug(FILE* fp);</code></pre>
 <ul>
 <li>开启debug模式(全部运行态的切换日志会记录到fp中)</li>
@@ -655,7 +669,7 @@ public:
 <li><strong>特别注意</strong>：若用户在run()函数中申请了某资源,则需要在cancel()函数中释放掉(否则会造成资源泄露)</li>
 <li>这一保护过程和写出<strong>异常安全</strong>的代码是等价的,下面为Demo:</li>
 </ul>
-<h3 id="section-27"></h3>
+<h3 id="section-28"></h3>
 <pre><code>class my_task : public user_task
 {
 void *resources; //某资源

@@ -20,6 +20,15 @@ do { \
 	} \
 } while(0)
 
+class uint32_compare
+{
+public:
+	bool operator()(ccf::uint32 x, ccf::uint32 y) const
+	{
+		return x>y;
+	}
+};
+
 class echo_task: public ccf::user_task
 {
 	static int times;
@@ -54,12 +63,11 @@ public:
 int echo_task::times = 0;
 ccf::udp echo_task::u;
 
-int get_seq_from_buf(const void* buf, size_t size, const void** pos, size_t* len)
+int get_seq_from_buf(const void* buf, size_t size, ccf::uint32* seq)
 {
 	if (size < sizeof(ccf::uint32))
 		return -1;
-	*pos = buf;
-	*len = sizeof(ccf::uint32);
+	*seq = ntohl(*(ccf::uint32*)buf);
 	return 0;
 }
 
@@ -73,13 +81,13 @@ class seq_task: public ccf::user_task
 	{
 		char buf[65536];
 		ccf::uint32 *pos = (ccf::uint32 *)buf;
-		*pos = this->seq;
+		*pos = htonl(this->seq);
 		int add_len = simple_rand()%100;
 		ccf::udp::send us(seq_task::u, seq_task::target, buf, sizeof(ccf::uint32) + add_len);
 		await(us);
 		cout << "seq_task send " << sizeof(ccf::uint32) + add_len << ", seq = " << this->seq << endl;
 		size_t len = sizeof(buf);
-		ccf::udp::recv_by_seq ur(seq_task::u, buf, len, this->seq);
+		ccf::udp::recv_by_seq_u32 ur(seq_task::u, buf, len, this->seq);
 		await(ur);
 		cout << "seq_task recv " << len << ", seq = " << this->seq << endl;
 		if (++seq_task::times == TEST_TIMES)
@@ -89,7 +97,7 @@ public:
 	static void init()
 	{
 		seq_task::target = ccf::ip_to_addr("127.0.0.1", TEST_PORT);
-		ASSERT(seq_task::u.bind(get_seq_from_buf) == 0);
+		ASSERT(seq_task::u.bind<uint32_compare>(get_seq_from_buf) == 0);
 	}
 	seq_task(ccf::uint32 seq) : seq(seq) {}
 };
