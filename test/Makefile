@@ -1,8 +1,9 @@
 C_ARGS = -g -Wall -O2
 CX = g++
+NO_CHECK = -Ddisable_check_seq_type
 
 LIB = ../lib/libuv.a ../lib/libccf.a
-BIN = test_primitive test_sleep test_udp test_udp2 test_udp3 test_tcp test_tcp2 test_tcp3 benchmark_sleep benchmark_udp benchmark_udp2 benchmark_tcp
+BIN = test_primitive test_sleep test_udp test_udp2 test_udp3 test_tcp test_tcp2 test_tcp3 benchmark_sleep benchmark_udp benchmark_udp2 benchmark_udp2_without_check_seq_type benchmark_tcp benchmark_tcp_without_check_seq_type
 
 LIB_ARGS = -L../lib -lccf -luv -lpthread -lrt
 INC_ARGS = -I../include
@@ -45,8 +46,14 @@ benchmark_udp: benchmark_udp.cc $(LIB)
 benchmark_udp2: benchmark_udp2.cc $(LIB)
 	$(CX) $(C_ARGS) -o $@ benchmark_udp2.cc $(LIB_ARGS) $(INC_ARGS)
 	
+benchmark_udp2_without_check_seq_type: benchmark_udp2.cc $(LIB)
+	$(CX) $(C_ARGS) -o $@ benchmark_udp2.cc $(LIB_ARGS) $(INC_ARGS) $(NO_CHECK)
+	
 benchmark_tcp: benchmark_tcp.cc $(LIB)
 	$(CX) $(C_ARGS) -o $@ benchmark_tcp.cc $(LIB_ARGS) $(INC_ARGS)
+
+benchmark_tcp_without_check_seq_type: benchmark_tcp.cc $(LIB)
+	$(CX) $(C_ARGS) -o $@ benchmark_tcp.cc $(LIB_ARGS) $(INC_ARGS) $(NO_CHECK)
 
 .PHONY: clean
 clean:
@@ -74,5 +81,9 @@ all_test: $(BIN)
 	@(./benchmark_sleep > /dev/null && echo 'Succeed') || echo 'Failed'
 	@echo 'benchmark udp'
 	@(./benchmark_udp2 > /dev/null && echo 'Succeed') || echo 'Failed'
+	@echo 'benchmark udp (without check seq type)'
+	@(./benchmark_udp2_without_check_seq_type > /dev/null && echo 'Succeed') || echo 'Failed'
 	@echo 'benchmark tcp'
 	@(./benchmark_tcp > /dev/null && echo 'Succeed') || echo 'Failed'
+	@echo 'benchmark tcp (without check seq type)'
+	@(./benchmark_tcp_without_check_seq_type > /dev/null && echo 'Succeed') || echo 'Failed'

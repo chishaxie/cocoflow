@@ -22,6 +22,7 @@
 
 #include <list>
 #include <map>
+#include <set>
 #include <string>
 
 /* Simplified uv.h */
@@ -274,6 +275,8 @@ protected:
 	virtual void call_unrecv(const void*, size_t) const = 0;
 	virtual void call_failed(const void*, size_t, int) const = 0;
 	virtual void drop_all(bool (*)(void*, void*), void*) = 0;
+	virtual bool check_type_for_udp(void*) = 0;
+	virtual bool check_type_for_tcp(void*) = 0;
 	friend class udp;
 	friend class tcp::connected;
 	template<typename SeqType> friend class tcp::recv_by_seq;
@@ -341,8 +344,7 @@ public:
 	class recv_by_seq : public recv_by_seq_if
 	{
 	public:
-		recv_by_seq(udp& handle, void* buf, size_t& len, const SeqType& seq)
-			: recv_by_seq_if(handle, buf, len), seq(seq) {}
+		inline recv_by_seq(udp& handle, void* buf, size_t& len, const SeqType& seq);
 		virtual ~recv_by_seq() {}
 	private:
 		recv_by_seq(const recv_by_seq&);
@@ -350,6 +352,7 @@ public:
 		virtual void run();
 		virtual void cancel();
 		const SeqType seq;
+		static std::set<void*> type_check;
 	};
 	typedef recv_by_seq<> recv_by_seq_u32;
 	udp();
@@ -624,8 +627,7 @@ template<typename SeqType = uint32>
 class recv_by_seq : public recv_by_seq_if
 {
 public:
-	recv_by_seq(int& ret, connected& handle, void* buf, size_t& len, const SeqType& seq)
-		: recv_by_seq_if(ret, handle, buf, len), seq(seq) {}
+	inline recv_by_seq(int& ret, connected& handle, void* buf, size_t& len, const SeqType& seq);
 	virtual ~recv_by_seq() {}
 private:
 	recv_by_seq(const recv_by_seq&);
@@ -633,6 +635,7 @@ private:
 	virtual void run();
 	virtual void cancel();
 	const SeqType seq;
+	static std::set<void*> type_check;
 };
 
 typedef recv_by_seq<> recv_by_seq_u32;
@@ -961,6 +964,14 @@ protected:
 				break;
 		}
 	}
+	virtual bool check_type_for_udp(void* rbs)
+	{
+		return dynamic_cast<udp::recv_by_seq<SeqType>*>(reinterpret_cast<udp::recv_by_seq_if*>(rbs)) != NULL;
+	}
+	virtual bool check_type_for_tcp(void* rbs)
+	{
+		return dynamic_cast<tcp::recv_by_seq<SeqType>*>(reinterpret_cast<tcp::recv_by_seq_if*>(rbs)) != NULL;
+	}
 private:
 	std::multimap<SeqType, void*, Compare> seq_mapping;
 	SeqType cur_seq;
@@ -969,7 +980,6 @@ private:
 	void (*failed)(const void*, size_t, int);
 	friend class udp;
 	friend class tcp::connected;
-	friend class tcp::recv_by_seq<SeqType>;
 };
 
 template<typename SeqType>
@@ -996,6 +1006,24 @@ int udp::bind(
 		return -1;
 	this->seqer = new seqer_wrapper<SeqType, Compare>(getter, unrecv, failed);
 	return 0;
+}
+
+template<typename SeqType>
+std::set<void*> udp::recv_by_seq<SeqType>::type_check;
+
+template<typename SeqType>
+udp::recv_by_seq<SeqType>::recv_by_seq(udp& handle, void* buf, size_t& len, const SeqType& seq)
+	: recv_by_seq_if(handle, buf, len), seq(seq)
+{
+#if !defined(disable_check_seq_type)
+	if (ccf_unlikely(!udp::recv_by_seq<SeqType>::type_check.count(&handle)))
+	{
+		if (this->handle.seqer->check_type_for_udp(this))
+			(void)udp::recv_by_seq<SeqType>::type_check.insert(&handle);
+		else
+			CCF_FATAL_ERROR("Check seq type failed in udp::recv_by_seq<SeqType>");
+	}
+#endif
 }
 
 template<typename SeqType>
@@ -1044,6 +1072,24 @@ int connected::bind(
 		return -1;
 	this->seqer = new seqer_wrapper<SeqType, Compare>(getter, unrecv, failed);
 	return this->bind_inner(min_len, max_len, lener);
+}
+
+template<typename SeqType>
+std::set<void*> recv_by_seq<SeqType>::type_check;
+
+template<typename SeqType>
+recv_by_seq<SeqType>::recv_by_seq(int& ret, connected& handle, void* buf, size_t& len, const SeqType& seq)
+	: recv_by_seq_if(ret, handle, buf, len), seq(seq)
+{
+#if !defined(disable_check_seq_type)
+	if (ccf_unlikely(!recv_by_seq<SeqType>::type_check.count(&handle)))
+	{
+		if (this->handle.seqer->check_type_for_tcp(this))
+			(void)recv_by_seq<SeqType>::type_check.insert(&handle);
+		else
+			CCF_FATAL_ERROR("Check seq type failed in tcp::recv_by_seq<SeqType>");
+	}
+#endif
 }
 
 template<typename SeqType>
