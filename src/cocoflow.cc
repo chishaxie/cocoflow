@@ -81,7 +81,7 @@ void __init_setting(uint32* &free_list_front, uint32* &free_list_end, uint32 sta
 	free_list_end = free_list_front + max_task_num;
 	for (uint32 i=0; i<max_task_num; i++, g_max_task_num++)
 		free_list_front[i] = g_max_task_num;
-	g_max_stack_size += stack_size * max_task_num;
+	g_max_stack_size += stack_size * (size_t)max_task_num;
 	setting_list.push_back(setting(stack_size, protect_size, max_task_num));
 }
 

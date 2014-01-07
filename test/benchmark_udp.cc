@@ -15,7 +15,7 @@ do { \
 	if (!(x)) \
 	{ \
 		fprintf(stderr, "[ASSERT]: " #x " failed at " __FILE__ ":%u\n", __LINE__); \
-		exit(1); \
+		abort(); \
 	} \
 } while(0)
 

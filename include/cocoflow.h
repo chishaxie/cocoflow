@@ -251,36 +251,7 @@ typedef size_t len_getter(const void* buf, size_t size); //failure:(return<size)
 
 typedef void pkg_ignored(const void* buf, size_t size, const struct sockaddr* addr);
 
-class udp;
-namespace tcp {
-	class listening;
-	class connected;
-	class accept;
-	class connect;
-	class send;
-	class recv;
-	class recv_till;
-	class recv_by_seq_if;
-	template<typename SeqType> class recv_by_seq;
-}
-
-class seqer_wrapper_if
-{
-protected:
-	seqer_wrapper_if() {}
-	virtual ~seqer_wrapper_if() {}
-	virtual void insert(const void*, void*) = 0;
-	virtual void erase(const void*) = 0;
-	virtual int unwrap(const void*, size_t, void**) = 0;
-	virtual void call_unrecv(const void*, size_t) const = 0;
-	virtual void call_failed(const void*, size_t, int) const = 0;
-	virtual void drop_all(bool (*)(void*, void*), void*) = 0;
-	virtual bool check_type_for_udp(void*) = 0;
-	virtual bool check_type_for_tcp(void*) = 0;
-	friend class udp;
-	friend class tcp::connected;
-	template<typename SeqType> friend class tcp::recv_by_seq;
-};
+class seqer_wrapper_if;
 
 class udp
 {
@@ -433,6 +404,9 @@ private:
 	static void tcp_accept_cb(uv_stream_t*, int);
 	friend class accept;
 };
+
+class recv;
+class recv_till;
 
 class connected
 {
@@ -664,15 +638,33 @@ void set_debug(FILE* fp);
 # define CCF_FATAL_ERROR(fmt, args...) \
 do { \
 	fprintf(stderr, "[FATAL]: " fmt "\n", ##args); \
-	exit(1); \
+	abort(); \
 } while(0)
 #else
 # define CCF_FATAL_ERROR(fmt, ...) \
 do { \
 	fprintf(stderr, "[FATAL]: " fmt "\n", __VA_ARGS__); \
-	exit(1); \
+	abort(); \
 } while(0)
 #endif
+
+class seqer_wrapper_if
+{
+protected:
+	seqer_wrapper_if() {}
+	virtual ~seqer_wrapper_if() {}
+	virtual void insert(const void*, void*) = 0;
+	virtual void erase(const void*) = 0;
+	virtual int unwrap(const void*, size_t, void**) = 0;
+	virtual void call_unrecv(const void*, size_t) const = 0;
+	virtual void call_failed(const void*, size_t, int) const = 0;
+	virtual void drop_all(bool (*)(void*, void*), void*) = 0;
+	virtual bool check_type_for_udp(void*) = 0;
+	virtual bool check_type_for_tcp(void*) = 0;
+	friend class udp;
+	friend class tcp::connected;
+	template<typename SeqType> friend class tcp::recv_by_seq;
+};
 
 static const uint32 EVENT_LOOP_ID = 0xffffffff;
 

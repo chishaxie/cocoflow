@@ -15,7 +15,7 @@ do { \
 	if (!(exp)) \
 	{ \
 		fprintf(stderr, "[Line: %u] expect " #exp "\n", __LINE__); \
-		exit(1); \
+		abort(); \
 	} \
 } while(0)
 
@@ -24,7 +24,7 @@ do { \
 	if (++g_order != order) \
 	{ \
 		fprintf(stderr, "[Line: %u] expect %u, actual %u\n", __LINE__, order, g_order); \
-		exit(1); \
+		abort(); \
 	} \
 } while(0)
 

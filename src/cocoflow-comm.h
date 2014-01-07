@@ -20,7 +20,7 @@ extern "C" {
 	#define FATAL_ERROR(fmt, args...) \
 	do { \
 		fprintf(stderr, "[FATAL]: " fmt "\n", ##args); \
-		exit(1); \
+		abort(); \
 	} while(0)
 	#define LOG_DEBUG(fmt, args...) \
 	do { \
@@ -34,7 +34,7 @@ extern "C" {
 	#define FATAL_ERROR(fmt, ...) \
 	do { \
 		fprintf(stderr, "[FATAL]: " fmt "\n", __VA_ARGS__); \
-		exit(1); \
+		abort(); \
 	} while(0)
 	#define LOG_DEBUG(fmt, ...) \
 	do { \
@@ -85,7 +85,7 @@ namespace ccf {
 		(runtime)->uc_link = &global_loop_running; \
 		(runtime)->uc_stack.ss_sp = (mem); \
 		(runtime)->uc_stack.ss_size = (size); \
-		makecontext(runtime, reinterpret_cast<void (*)()>(__task_runtime), 1, id); \
+		makecontext(runtime, reinterpret_cast<void (*)()>(__task_runtime), 1, (long)id); \
 	} while(0)
 	#define coroutine_switch(from, to, from_id, to_id) \
 	do { \
