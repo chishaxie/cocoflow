@@ -1,4 +1,5 @@
 C_ARGS = -g -Wall -O2
+CC = gcc
 CX = g++
 
 UV_VERSION=0.10.19
@@ -10,10 +11,10 @@ INC_ARGS = -I../include
 
 all: $(LIB)
 
-../lib/libccf.a: cocoflow.o sleep.o sync.o udp.o tcp.o tools.o
+../lib/libccf.a: cocoflow.o sleep.o sync.o udp.o tcp.o tools.o max_map_count.o
 	ar cr $@ $^
 
-cocoflow.o: cocoflow.cc cocoflow-comm.h ../include/cocoflow.h uv/uv.h
+cocoflow.o: cocoflow.cc cocoflow-comm.h max_map_count.h ../include/cocoflow.h uv/uv.h
 	$(CX) $(C_ARGS) -fPIC -c -o $@ cocoflow.cc $(INC_ARGS)
 	
 sleep.o: sleep.cc cocoflow-comm.h ../include/cocoflow.h uv/uv.h
@@ -30,6 +31,9 @@ tcp.o: tcp.cc cocoflow-comm.h ../include/cocoflow.h uv/uv.h
 	
 tools.o: tools.cc cocoflow-comm.h ../include/cocoflow.h uv/uv.h
 	$(CX) $(C_ARGS) -fPIC -c -o $@ tools.cc $(INC_ARGS)
+
+max_map_count.o: max_map_count.c max_map_count.h
+	$(CC) $(C_ARGS) -fPIC -c -o $@ max_map_count.c
 
 uv/uv.h: ../deps/libuv.a
 	@mkdir uv; cp -r ../deps/libuv-$(UV_VERSION)/include/* uv/

@@ -1,5 +1,11 @@
 #include "cocoflow-comm.h"
 
+#if !defined(_WIN32) && !defined(_WIN64)
+#include "max_map_count.h"
+#endif
+
+#define RESV_MAP_COUNT 5530
+
 namespace ccf {
 
 struct setting
@@ -27,6 +33,7 @@ static std::list<setting> setting_list;
 static uint32 g_max_task_num = 0;
 static size_t g_max_stack_size = 0;
 static event_task* top_task;
+static int g_max_map_count = 0;
 
 void set_debug(FILE* fp)
 {
@@ -83,11 +90,19 @@ void __init_setting(uint32* &free_list_front, uint32* &free_list_end, uint32 sta
 		free_list_front[i] = g_max_task_num;
 	g_max_stack_size += stack_size * (size_t)max_task_num;
 	setting_list.push_back(setting(stack_size, protect_size, max_task_num));
+	if (protect_size)
+		g_max_map_count += 2 * max_task_num;
 }
 
 void __init()
 {
 	global_initialized = true;
+	
+#if !defined(_WIN32) && !defined(_WIN64)
+	int max_map_count = get_max_map_count();
+	if (max_map_count > RESV_MAP_COUNT && g_max_map_count > max_map_count - RESV_MAP_COUNT)
+		FATAL_ERROR("Out of memory (max-map-count:%d(resv:%d), required-map-count:%d)", max_map_count, RESV_MAP_COUNT, g_max_map_count);
+#endif
 	
 	void* mem = coroutine_memory_alloc(g_max_stack_size);
 	if (!mem)

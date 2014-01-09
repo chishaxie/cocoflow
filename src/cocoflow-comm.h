@@ -114,6 +114,8 @@ static inline uv_loop_t* loop()
 	return __loop;
 }
 
+#define interrupt_canceled _ic
+
 struct interrupt_canceled
 {
 	interrupt_canceled(int level) : level(level) {}
