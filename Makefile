@@ -28,4 +28,4 @@ del: $(LIB)
 	cp lib/libuv.a libuv.a
 	cp lib/libccf.a libccf.a
 	cp include/cocoflow.h cocoflow.h
-	rm -rf include/ lib/ src/ demo/ test/ Makefile
+	rm -rf include/ lib/ src/ demo/ test/ deps/ docs/ extensions/ test/ vc/ Makefile README.md vcbuild.bat
