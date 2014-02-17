@@ -83,8 +83,8 @@ msbuild vc\cocoflow.sln /t:demo_all_sort,demo_any_sort,demo_http_server /p:Confi
 msbuild vc\cocoflow.sln /t:demo_all_sort,demo_any_sort,demo_http_server /p:Configuration=Release /p:Platform="%CCF_MS_PLATFORM%" /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
 
 echo Compiling test ...
-msbuild vc\cocoflow.sln /t:test_primitive,test_sleep,test_tcp,test_tcp2,test_tcp3,test_udp,test_udp2,test_udp3 /p:Configuration=Debug /p:Platform="%CCF_MS_PLATFORM%" /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
-msbuild vc\cocoflow.sln /t:test_primitive,test_sleep,test_tcp,test_tcp2,test_tcp3,test_udp,test_udp2,test_udp3 /p:Configuration=Release /p:Platform="%CCF_MS_PLATFORM%" /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
+msbuild vc\cocoflow.sln /t:test_primitive,test_sleep,test_tcp,test_tcp2,test_tcp3,test_udp,test_udp2,test_udp3,unexpected_tcp_timing /p:Configuration=Debug /p:Platform="%CCF_MS_PLATFORM%" /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
+msbuild vc\cocoflow.sln /t:test_primitive,test_sleep,test_tcp,test_tcp2,test_tcp3,test_udp,test_udp2,test_udp3,unexpected_tcp_timing /p:Configuration=Release /p:Platform="%CCF_MS_PLATFORM%" /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
 msbuild vc\cocoflow.sln /t:benchmark_sleep,benchmark_tcp,benchmark_udp,benchmark_udp2 /p:Configuration=Debug /p:Platform="%CCF_MS_PLATFORM%" /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
 msbuild vc\cocoflow.sln /t:benchmark_sleep,benchmark_tcp,benchmark_udp,benchmark_udp2 /p:Configuration=Release /p:Platform="%CCF_MS_PLATFORM%" /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
 

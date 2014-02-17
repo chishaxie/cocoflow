@@ -16,6 +16,8 @@ echo test tcp [3]
 (test_tcp > nul && echo Succeed) || echo Failed
 (test_tcp2 > nul && echo Succeed) || echo Failed
 (test_tcp3 > nul && echo Succeed) || echo Failed
+echo test tcp timing
+(unexpected_tcp_timing > nul && echo Succeed) || echo Failed
 echo benchmark sleep
 (benchmark_sleep > nul && echo Succeed) || echo Failed
 echo benchmark udp

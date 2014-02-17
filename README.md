@@ -37,7 +37,7 @@ Prerequisites (Windows):
 
     * UnZip (You can extract dependencies by other tools)
     * Python 2.6 or 2.7
-    * Visual Studio 2008 or 2010 or 2012
+    * Visual Studio 2008 or 2010 or 2012 or 2013
 	
 Windows:
 
@@ -51,7 +51,8 @@ Linux:
 	
 Windows:
 
-	run vc\test.bat
+	run vc\test.bat (for Win32)
+	run vc\test_x64.bat (for Win64)
 	
 ### License
 
