@@ -5,7 +5,11 @@
 using namespace std;
 
 #define TEST_PORT	31005
+#ifdef _WIN32
+#define TEST_TIMES	1000 //lite
+#else
 #define TEST_TIMES	10000
+#endif
 #define TEST_SIZE	800
 
 #define ASSERT(x) \
@@ -89,8 +93,8 @@ class main_task: public test_task
 
 int main()
 {
-	ccf::event_task::init(100);
-	test_task::init(11000);
+	ccf::event_task::init(1);
+	test_task::init(TEST_TIMES + 2);
 	main_task tMain;
 	
 	ccf::cocoflow(tMain);

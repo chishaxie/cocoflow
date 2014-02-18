@@ -8,7 +8,11 @@
 using namespace std;
 
 #define TEST_PORT	30917
+#ifdef _WIN32
+#define TEST_TIMES	1000 //lite
+#else
 #define TEST_TIMES	10000
+#endif
 
 #define ASSERT(x) \
 do { \
@@ -18,6 +22,16 @@ do { \
 		abort(); \
 	} \
 } while(0)
+
+static void my_pkg_seq_unrecv(const void*, size_t, const ccf::uint32&)
+{
+	ASSERT(0);
+}
+
+static void my_pkg_seq_failed(const void*, size_t, int)
+{
+	ASSERT(0);
+}
 
 static clock_t time_bgn, time_cut, time_end;
 static int sleep_time = 2;
@@ -41,7 +55,7 @@ class echo_task: public test_task
 		{
 			echo_task* echo = new echo_task();
 			ASSERT(echo->status() == ccf::ready);
-			start(echo);
+			ccf::start(echo);
 		}
 		ccf::udp::send us(echo_task::u, peer, buf, len);
 		await(us);
@@ -93,7 +107,7 @@ public:
 	static void init()
 	{
 		seq_task::target = ccf::ip_to_addr("127.0.0.1", TEST_PORT);
-		ASSERT(seq_task::u.bind(get_seq_from_buf) == 0);
+		ASSERT(seq_task::u.bind(get_seq_from_buf, my_pkg_seq_unrecv, my_pkg_seq_failed) == 0);
 	}
 	seq_task(ccf::uint32 seq) : seq(seq) {}
 };
@@ -108,7 +122,7 @@ class main_task: public test_task
 	{
 		echo_task::init();
 		seq_task::init();
-		start(new echo_task());
+		ccf::start(new echo_task());
 		for (int i=0; i<TEST_TIMES; i++)
 		{
 			if ((i+1)%100 == 0) //Avoid udp error
@@ -118,7 +132,7 @@ class main_task: public test_task
 			}
 			seq_task* seq = new seq_task(i);
 			ASSERT(seq->status() == ccf::ready);
-			start(seq);
+			ccf::start(seq);
 		}
 	}
 };
@@ -130,8 +144,8 @@ int main(int argc, char* argv[])
 	
 	time_bgn = clock();
 	
-	ccf::event_task::init(100);
-	test_task::init(11000);
+	ccf::event_task::init(1);
+	test_task::init(TEST_TIMES + 101);
 	main_task tMain;
 	
 	time_cut = clock();

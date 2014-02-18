@@ -16,13 +16,13 @@ echo test tcp [3]
 (test_tcp > nul && echo Succeed) || echo Failed
 (test_tcp2 > nul && echo Succeed) || echo Failed
 (test_tcp3 > nul && echo Succeed) || echo Failed
-echo test tcp timing
+echo test tcp timing (lite)
 (unexpected_tcp_timing > nul && echo Succeed) || echo Failed
 echo benchmark sleep
 (benchmark_sleep > nul && echo Succeed) || echo Failed
-echo benchmark udp
+echo benchmark udp (lite)
 (benchmark_udp2 > nul && echo Succeed) || echo Failed
-echo benchmark tcp
+echo benchmark tcp (lite)
 (benchmark_tcp > nul && echo Succeed) || echo Failed
 
 pause

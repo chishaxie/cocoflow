@@ -8,16 +8,30 @@
 using namespace std;
 
 #define TEST_PORT	30917
+#ifdef _WIN32
+#define TEST_TIMES	1000 //lite
+#else
 #define TEST_TIMES	10000
+#endif
 
 #define ASSERT(x) \
 do { \
 	if (!(x)) \
 	{ \
 		fprintf(stderr, "[ASSERT]: " #x " failed at " __FILE__ ":%u\n", __LINE__); \
-		exit(1); \
+		abort(); \
 	} \
 } while(0)
+
+static void my_pkg_seq_unrecv(const void*, size_t, const ccf::uint32&)
+{
+	ASSERT(0);
+}
+
+static void my_pkg_seq_failed(const void*, size_t, int)
+{
+	ASSERT(0);
+}
 
 static clock_t time_bgn, time_cut, time_end;
 
@@ -94,7 +108,7 @@ public:
 	static void init()
 	{
 		seq_task::target = ccf::ip_to_addr("127.0.0.1", TEST_PORT);
-		ASSERT(seq_task::u.bind(get_seq_from_buf) == 0);
+		ASSERT(seq_task::u.bind(get_seq_from_buf, my_pkg_seq_unrecv, my_pkg_seq_failed) == 0);
 	}
 	seq_task(ccf::uint32 seq) : seq(seq) {}
 };
@@ -128,8 +142,8 @@ int main()
 {	
 	time_bgn = clock();
 	
-	ccf::event_task::init(100);
-	test_task::init(11000);
+	ccf::event_task::init(1);
+	test_task::init(TEST_TIMES + 101);
 	main_task tMain;
 	
 	time_cut = clock();

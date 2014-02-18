@@ -61,7 +61,7 @@ int main(int argc, char *argv[])
 	if (argc > 2)
 		port = atoi(argv[1]);
 	
-	my_task::init(4096);
+	my_task::init(1025);
 	ccf::event_task::init(4);
 	
 	main_task my_main;

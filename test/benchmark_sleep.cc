@@ -52,8 +52,8 @@ int main()
 {	
 	time_bgn = clock();
 	
-	ccf::event_task::init(100);
-	test_task::init(1100);
+	ccf::event_task::init(1);
+	test_task::init(TEST_NUM + 1);
 	main_task tMain;
 	
 	time_cut = clock();
