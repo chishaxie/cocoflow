@@ -1,6 +1,7 @@
 #ifndef __COCOFLOW_COMM_H__
 #define __COCOFLOW_COMM_H__
 
+#include <typeinfo>
 #include <time.h>
 
 #if !defined(_WIN32) && !defined(_WIN64)
@@ -9,12 +10,18 @@
 # include <sys/mman.h>
 #endif
 
+#if defined(__GNUG__)
+# include <cxxabi.h>
+#endif
+
 extern "C" {
 #define __disable_simplify_uv_h__
 #include "uv/uv.h"
 }
 
 #include "cocoflow.h"
+
+#define CLASS_TIPS_MAX_LEN 2048
 
 #if !defined(_MSC_VER)
 	#define FATAL_ERROR(fmt, args...) \
@@ -27,7 +34,7 @@ extern "C" {
 		uint32 ns = uv_hrtime()%1000000000; \
 		time_t s = time(NULL); \
 		struct tm date = *localtime(&s); \
-		fprintf(global_debug_file, "[%02u:%02u:%02u.%u] [DEBUG]: " fmt "\n", date.tm_hour, date.tm_min, date.tm_sec, ns, ##args); \
+		fprintf(global_debug_file, "[%02u:%02u:%02u.%09u] [DEBUG]: " fmt "\n", date.tm_hour, date.tm_min, date.tm_sec, ns, ##args); \
 	} while(0)
 #else
 	#pragma warning(disable:4996)
@@ -41,7 +48,7 @@ extern "C" {
 		uint32 ns = uv_hrtime()%1000000000; \
 		time_t s = time(NULL); \
 		struct tm date = *localtime(&s); \
-		fprintf(global_debug_file, "[%02u:%02u:%02u.%u] [DEBUG]: " fmt "\n", date.tm_hour, date.tm_min, date.tm_sec, ns, __VA_ARGS__); \
+		fprintf(global_debug_file, "[%02u:%02u:%02u.%09u] [DEBUG]: " fmt "\n", date.tm_hour, date.tm_min, date.tm_sec, ns, __VA_ARGS__); \
 	} while(0)
 #endif
 
@@ -105,6 +112,27 @@ extern coroutine    global_loop_running;
 extern event_task*  global_current_task;
 extern bool         global_signal_canceled;
 extern FILE*        global_debug_file;
+extern char         global_debug_output_src[CLASS_TIPS_MAX_LEN];
+extern char         global_debug_output_dst[CLASS_TIPS_MAX_LEN];
+
+static inline const char* et_to_tips(const event_task* et, char* tips)
+{
+	if (et != NULL)
+	{
+#if defined(__GNUG__)
+		size_t len = CLASS_TIPS_MAX_LEN;
+		abi::__cxa_demangle(typeid(*et).name(), tips, &len, NULL);
+#else
+		strcpy(tips, typeid(*et).name());
+#endif
+	}
+	else
+		strcpy(tips, "???");
+	return tips;
+}
+
+#define src_to_tips(src) et_to_tips(src, global_debug_output_src)
+#define dst_to_tips(dst) et_to_tips(dst, global_debug_output_dst)
 
 static inline uv_loop_t* loop()
 {
@@ -130,11 +158,11 @@ static inline void swap_running(uint32 cur, uint32 next)
 	if (ccf_unlikely(global_debug_file))
 	{
 		if (cur == EVENT_LOOP_ID)
-			LOG_DEBUG("Task switch event_loop -> %u", next);
+			LOG_DEBUG("[Switch] EventLoop -> %u-<%s>", next, dst_to_tips(global_task_manager[next]));
 		else if (next == EVENT_LOOP_ID)
-			LOG_DEBUG("Task switch %u -> event_loop", cur);
+			LOG_DEBUG("[Switch] %u-<%s> -> EventLoop", cur, src_to_tips(global_task_manager[cur]));
 		else
-			LOG_DEBUG("Task switch %u -> %u", cur, next);
+			LOG_DEBUG("[Switch] %u-<%s> -> %u-<%s>", cur, src_to_tips(global_task_manager[cur]), next, dst_to_tips(global_task_manager[next]));
 	}
 	coroutine_switch(cur_runing, next_runing, cur, next);
 	global_current_task = (cur == EVENT_LOOP_ID) ? (NULL) : (global_task_manager[cur]);
@@ -155,7 +183,12 @@ inline bool __task_yield(event_task* cur)
 			throw interrupt_canceled(0);
 		}
 		else
+		{
 			cur->cancel();
+			if (ccf_unlikely(global_debug_file))
+				LOG_DEBUG("[Logic] [any_of]  %u-<%s> is canceled",
+					cur->_unique_id, dst_to_tips(cur));
+		}
 		return false;
 	}
 	else

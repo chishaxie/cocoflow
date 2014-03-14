@@ -342,7 +342,7 @@ class main_task: public ccf::user_task
 			{
 				ccf::sleep s0(0), s1(1);
 				test_no_block tnb(2, 4, 3);
-				ccf::all_of any0(s0, s1);
+				ccf::any_of any0(s0, s1);
 				ccf::any_of any(any0, tnb);
 				await(any);
 				check(s0.status() == ccf::canceled);
