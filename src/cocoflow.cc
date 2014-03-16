@@ -53,14 +53,14 @@ inline void __task_cancel_children(event_task* cur, event_task** children, uint3
 	for (uint32 i=0; i<num; i++)
 	{
 		event_task* child = children[i];
-		if (child->_status == running)
+		if (task_get_status(child) == running)
 		{
 			for (event_task* final = child; ; final = final->reuse)
 			{
-				if (!final->_interruptable)
+				if (task_is_uninterruptable(final))
 				{
 					if (final != child)
-						final->_status = canceled;
+						task_set_status(final, canceled);
 					unsupport ++;
 					if (ccf_unlikely(global_debug_file))
 						LOG_DEBUG("[Logic] [any_of]  %u-<%s> is going to cancel %u-<%s> but uninterruptable",
@@ -70,7 +70,7 @@ inline void __task_cancel_children(event_task* cur, event_task** children, uint3
 				if (!final->reuse)
 				{
 					global_signal_canceled = true;
-					child->_status = canceled;
+					task_set_status(child, canceled);
 					if (ccf_unlikely(global_debug_file))
 						LOG_DEBUG("[Logic] [any_of]  %u-<%s> is going to cancel %u-<%s>",
 							cur->_unique_id, src_to_tips(cur), child->_unique_id, dst_to_tips(child));
@@ -145,17 +145,17 @@ void __task_runtime(uint32 _unique_id)
 	{
 		event_task* this_task = global_task_manager[_unique_id];
 		
-		this_task->_status = running;
+		task_set_status(this_task, running);
 		try {
 			this_task->run();
 		} catch (interrupt_canceled& sig) {
-			this_task->_status = canceled;
+			task_set_status(this_task, canceled);
 			this_task->cancel();
 			if (ccf_unlikely(global_debug_file))
 				LOG_DEBUG("[Logic] [any_of]  %u-<%s> is canceled", _unique_id, dst_to_tips(this_task));
 		}
-		if (this_task->_status == running)
-			this_task->_status = completed;
+		if (task_get_status(this_task) == running)
+			task_set_status(this_task, completed);
 			
 		uint32 next;
 		if (this_task->finish_to != EVENT_LOOP_ID || this_task->block_to == EVENT_LOOP_ID)
@@ -185,7 +185,7 @@ int __await(event_task* target)
 	if (ccf_unlikely(!global_current_task))
 		FATAL_ERROR("Call await() must be in a task");
 	
-	if (ccf_unlikely(target->_status != ready && target->_status != limited))
+	if (ccf_unlikely(task_get_status(target) != ready && task_get_status(target) != limited))
 		return -1;
 	
 	event_task* parent = global_current_task;
@@ -197,7 +197,7 @@ int __await(event_task* target)
 	target->finish_to = parent->_unique_id;
 	target->_unique_id = parent->_unique_id;
 	
-	target->_status = running;
+	task_set_status(target, running);
 	global_current_task = target;
 	parent->reuse = target;
 	
@@ -208,7 +208,7 @@ int __await(event_task* target)
 	try {
 		target->run();
 	} catch (interrupt_canceled& sig) {
-		target->_status = canceled;
+		task_set_status(target, canceled);
 		target->cancel();
 		
 		if (ccf_unlikely(global_debug_file))
@@ -224,7 +224,7 @@ int __await(event_task* target)
 	
 	if (ccf_unlikely(global_debug_file))
 	{
-		if (target->_status != canceled)
+		if (task_get_status(target) != canceled)
 			LOG_DEBUG("[Logic] [await]   %u-<%s> is completed (maybe without block)", target->_unique_id, dst_to_tips(target));
 		else
 			LOG_DEBUG("[Logic] [await]   %u-<%s> is completed with canceled-signal", target->_unique_id, dst_to_tips(target));
@@ -232,8 +232,8 @@ int __await(event_task* target)
 	
 	global_current_task = parent;
 	parent->reuse = NULL;
-	if (target->_status == running)
-		target->_status = completed;
+	if (task_get_status(target) == running)
+		task_set_status(target, completed);
 		
 	target->_unique_id = EVENT_LOOP_ID;
 	
@@ -244,9 +244,9 @@ int __await(event_task* target)
 		target->block_to = EVENT_LOOP_ID;
 	}
 	
-	if (target->_status == canceled) //Only unsupport cancel can reach
+	if (task_get_status(target) == canceled) //Only unsupport cancel can reach
 	{
-		target->_status = completed;
+		task_set_status(target, completed);
 		throw interrupt_canceled(0);
 	}
 	
@@ -258,7 +258,7 @@ int __start(event_task* target)
 	if (ccf_unlikely(!global_current_task))
 		FATAL_ERROR("Call start() must be in a task");
 	
-	if (ccf_unlikely(target->_status != ready))
+	if (ccf_unlikely(task_get_status(target) != ready))
 	{
 		delete target;
 		return -1;
@@ -312,9 +312,9 @@ void all_of::run()
 {
 	for (uint32 i=0; i<this->num; i++)
 	{
-		if (ccf_unlikely(this->children[i]->_status != ready))
+		if (ccf_unlikely(task_get_status(this->children[i]) != ready))
 		{
-			this->_status = child_unready;
+			task_set_status(this, child_unready);
 			return;
 		}
 		this->children[i]->block_to = this->_unique_id;
@@ -327,7 +327,7 @@ void all_of::run()
 			LOG_DEBUG("[Logic] [all_of]  %u-<%s> is going to start %u-<%s>",
 				this->_unique_id, src_to_tips(this), this->children[i]->_unique_id, dst_to_tips(this->children[i]));
 		__task_start_child(this, this->children[i]);
-		if (ccf_unlikely(global_debug_file) && this->children[i]->_status == completed)
+		if (ccf_unlikely(global_debug_file) && task_get_status(this->children[i]) == completed)
 			LOG_DEBUG("[Logic] [all_of]  %u-<%s> is completed without block",
 				this->children[i]->_unique_id, dst_to_tips(this->children[i]));
 	}
@@ -336,7 +336,7 @@ void all_of::run()
 	{
 		bool all_completed = true;
 		for (uint32 i=0; i<this->num; i++)
-			if (this->children[i]->_status != completed)
+			if (task_get_status(this->children[i]) != completed)
 			{
 				all_completed = false;
 				if (ccf_unlikely(global_debug_file))
@@ -378,9 +378,9 @@ void any_of::run()
 {
 	for (uint32 i=0; i<this->num; i++)
 	{
-		if (ccf_unlikely(this->children[i]->_status != ready))
+		if (ccf_unlikely(task_get_status(this->children[i]) != ready))
 		{
-			this->_status = child_unready;
+			task_set_status(this, child_unready);
 			return;
 		}
 		this->children[i]->block_to = this->_unique_id;
@@ -393,7 +393,7 @@ void any_of::run()
 			LOG_DEBUG("[Logic] [any_of]  %u-<%s> is going to start %u-<%s>",
 				this->_unique_id, src_to_tips(this), this->children[i]->_unique_id, dst_to_tips(this->children[i]));
 		__task_start_child(this, this->children[i]);
-		if (this->children[i]->_status == completed)
+		if (task_get_status(this->children[i]) == completed)
 		{
 			this->completed_id = i;
 			if (ccf_unlikely(global_debug_file))
@@ -407,7 +407,7 @@ void any_of::run()
 		for (;;)
 		{
 			for (uint32 i=0; i<this->num; i++)
-				if (this->children[i]->_status == completed)
+				if (task_get_status(this->children[i]) == completed)
 				{
 					this->completed_id = i;
 					if (ccf_unlikely(global_debug_file))

@@ -114,8 +114,7 @@ private:
 	uint32 _unique_id;
 	uint32 block_to;
 	uint32 finish_to;
-	task_status _status;
-	bool _interruptable;
+	unsigned char _info;
 private:
 	static const size_t STACK_SIZE;
 	static const size_t PROTECT_SIZE;
@@ -718,7 +717,7 @@ void cocoflow(_task_tpl& top)
 void __init();
 
 template<uint32 UserPages, uint32 ProtectPages>
-_task_tpl::task() : reuse(NULL), _interruptable(true)
+_task_tpl::task() : reuse(NULL), _info(0)
 {
 	if (ccf_unlikely(!global_initialized))
 		__init();
@@ -728,13 +727,13 @@ _task_tpl::task() : reuse(NULL), _interruptable(true)
 		if (ccf_likely(_task_tpl::free_list_front != _task_tpl::free_list_end))
 		{
 			this->_unique_id = *(_task_tpl::free_list_front++);
-			this->_status = ready;
+			this->_info = (this->_info & 0xf0) | ready; //defined in cocoflow-comm.h
 			global_task_manager[this->_unique_id] = reinterpret_cast<event_task*>(this);
 		}
 		else
 		{
 			this->_unique_id = EVENT_LOOP_ID;
-			this->_status = limited;
+			this->_info = (this->_info & 0xf0) | limited; //defined in cocoflow-comm.h
 		}
 	}
 	else
@@ -756,7 +755,7 @@ _task_tpl::~task()
 template<uint32 UserPages, uint32 ProtectPages>
 task_status _task_tpl::status() const
 {
-	return this->_status;
+	return (task_status)(this->_info & 0x0f); //defined in cocoflow-comm.h
 }
 
 template<uint32 UserPages, uint32 ProtectPages>
@@ -768,7 +767,7 @@ uint32 _task_tpl::unique_id() const
 template<uint32 UserPages, uint32 ProtectPages>
 inline void _task_tpl::uninterruptable()
 {
-	this->_interruptable = false;
+	this->_info |= 0x10; //defined in cocoflow-comm.h
 }
 
 void __init_setting(uint32* &, uint32* &, uint32, uint32, uint32);

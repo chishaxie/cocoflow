@@ -63,6 +63,27 @@ do { \
 
 namespace ccf {
 
+#define task_set_status(task, status) \
+do { \
+	(task)->_info = ((task)->_info & 0xf0) | (status); \
+} while(0)
+#define task_get_status(task) ((task)->_info & 0x0f)
+
+#define task_info_uninterruptable  0x10
+#define task_info_all_any          0x20
+
+#define task_set_uninterruptable(task) \
+do { \
+	(task)->_info |= task_info_uninterruptable; \
+} while(0)
+#define task_is_uninterruptable(task) ((task)->_info & task_info_uninterruptable)
+
+#define task_set_all_any(task) \
+do { \
+	(task)->_info |= task_info_all_any; \
+} while(0)
+#define task_is_all_any(task) ((task)->_info & task_info_all_any)
+
 #if defined(_WIN32) || defined(_WIN64)
 	typedef LPVOID coroutine;
 	#define coroutine_by_thread(runtime) \
@@ -177,9 +198,9 @@ inline bool __task_yield(event_task* cur)
 	if (global_signal_canceled)
 	{
 		global_signal_canceled = false;
-		if (cur->_status != canceled) //Indirect
+		if (task_get_status(cur) != canceled) //Indirect
 		{
-			cur->_status = canceled;
+			task_set_status(cur, canceled);
 			throw interrupt_canceled(0);
 		}
 		else
