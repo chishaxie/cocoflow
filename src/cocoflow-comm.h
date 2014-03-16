@@ -179,11 +179,11 @@ static inline void swap_running(uint32 cur, uint32 next)
 	if (ccf_unlikely(global_debug_file))
 	{
 		if (cur == EVENT_LOOP_ID)
-			LOG_DEBUG("[Switch] EventLoop -> %u-<%s>", next, dst_to_tips(global_task_manager[next]));
+			LOG_DEBUG("[Switch]          EventLoop -> %u-<%s>", next, dst_to_tips(global_task_manager[next]));
 		else if (next == EVENT_LOOP_ID)
-			LOG_DEBUG("[Switch] %u-<%s> -> EventLoop", cur, src_to_tips(global_task_manager[cur]));
+			LOG_DEBUG("[Switch]          %u-<%s> -> EventLoop", cur, src_to_tips(global_task_manager[cur]));
 		else
-			LOG_DEBUG("[Switch] %u-<%s> -> %u-<%s>", cur, src_to_tips(global_task_manager[cur]), next, dst_to_tips(global_task_manager[next]));
+			LOG_DEBUG("[Switch]          %u-<%s> -> %u-<%s>", cur, src_to_tips(global_task_manager[cur]), next, dst_to_tips(global_task_manager[next]));
 	}
 	coroutine_switch(cur_runing, next_runing, cur, next);
 	global_current_task = (cur == EVENT_LOOP_ID) ? (NULL) : (global_task_manager[cur]);

@@ -83,12 +83,13 @@ inline void __task_cancel_children(event_task* cur, event_task** children, uint3
 	if (unsupport)
 	{
 		cur->uninterruptable();
-		for (uint32 i=0; i<unsupport; i++)
+		while (unsupport > 0)
 		{
 			if (ccf_unlikely(global_debug_file))
-				LOG_DEBUG("[Logic] [any_of]  %u-<%s> is waiting for %u uninterruptable task%s",
-					cur->_unique_id, src_to_tips(cur), unsupport-i, unsupport-i>1?"s":"");
+				LOG_DEBUG("[Logic] [any_of]  %u-<%s> is waiting for all of %u uninterruptable task%s",
+					cur->_unique_id, src_to_tips(cur), unsupport, unsupport>1? "s": "");
 			CHECK(__task_yield(cur) == true);
+			unsupport --;
 		}
 	}
 }
@@ -151,8 +152,6 @@ void __task_runtime(uint32 _unique_id)
 		} catch (interrupt_canceled& sig) {
 			task_set_status(this_task, canceled);
 			this_task->cancel();
-			if (ccf_unlikely(global_debug_file))
-				LOG_DEBUG("[Logic] [any_of]  %u-<%s> is canceled", _unique_id, dst_to_tips(this_task));
 		}
 		if (task_get_status(this_task) == running)
 			task_set_status(this_task, completed);
@@ -162,6 +161,21 @@ void __task_runtime(uint32 _unique_id)
 			next = this_task->finish_to; //End of await or start
 		else
 			next = this_task->block_to; //End of start without really block
+		
+		if (ccf_unlikely(global_debug_file) && task_is_all_any(this_task))
+		{
+			event_task* parent = global_task_manager[this_task->finish_to];
+			while (parent->reuse)
+				parent = parent->reuse;
+			if (dynamic_cast<any_of*>(parent))
+				LOG_DEBUG("[Logic] [any_of]  %u-<%s> is %s",
+					_unique_id, dst_to_tips(this_task), task_get_status(this_task) != canceled? "completed": "canceled");
+			else if (dynamic_cast<all_of*>(parent))
+				LOG_DEBUG("[Logic] [all_of]  %u-<%s> is %s",
+					_unique_id, dst_to_tips(this_task), task_get_status(this_task) != canceled? "completed": "canceled");
+			else
+				CHECK(0);
+		}
 			
 		if (this_task->finish_to == EVENT_LOOP_ID && this_task != top_task)
 		{
@@ -310,6 +324,8 @@ all_of::all_of(event_task* targets[], uint32 num) : num(num)
 
 void all_of::run()
 {
+	uint32 count = this->num;
+	
 	for (uint32 i=0; i<this->num; i++)
 	{
 		if (ccf_unlikely(task_get_status(this->children[i]) != ready))
@@ -327,28 +343,25 @@ void all_of::run()
 			LOG_DEBUG("[Logic] [all_of]  %u-<%s> is going to start %u-<%s>",
 				this->_unique_id, src_to_tips(this), this->children[i]->_unique_id, dst_to_tips(this->children[i]));
 		__task_start_child(this, this->children[i]);
-		if (ccf_unlikely(global_debug_file) && task_get_status(this->children[i]) == completed)
-			LOG_DEBUG("[Logic] [all_of]  %u-<%s> is completed without block",
-				this->children[i]->_unique_id, dst_to_tips(this->children[i]));
+		if (task_get_status(this->children[i]) == completed)
+		{
+			count --;
+			if (ccf_unlikely(global_debug_file))
+				LOG_DEBUG("[Logic] [all_of]  %u-<%s> is completed without block",
+					this->children[i]->_unique_id, dst_to_tips(this->children[i]));
+		}
+		else
+			task_set_all_any(this->children[i]);
 	}
 	
-	for (;;)
+	while (count > 0)
 	{
-		bool all_completed = true;
-		for (uint32 i=0; i<this->num; i++)
-			if (task_get_status(this->children[i]) != completed)
-			{
-				all_completed = false;
-				if (ccf_unlikely(global_debug_file))
-					LOG_DEBUG("[Logic] [all_of]  %u-<%s> is waiting for %u-<%s>",
-						this->_unique_id, src_to_tips(this), this->children[i]->_unique_id, dst_to_tips(this->children[i]));
-				else
-					break;
-			}
-		if (all_completed)
-			break;
+		if (ccf_unlikely(global_debug_file))
+			LOG_DEBUG("[Logic] [all_of]  %u-<%s> is waiting for all of %u task%s",
+				this->_unique_id, src_to_tips(this), count, count>1? "s": "");
 		if (!__task_yield(this))
 			return;
+		count --;
 	}
 }
 
@@ -401,23 +414,24 @@ void any_of::run()
 					this->children[i]->_unique_id, dst_to_tips(this->children[i]));
 			break;
 		}
+		else
+			task_set_all_any(this->children[i]);
 	}
 	
 	if (this->completed_id == -1)
-		for (;;)
-		{
-			for (uint32 i=0; i<this->num; i++)
-				if (task_get_status(this->children[i]) == completed)
-				{
-					this->completed_id = i;
-					if (ccf_unlikely(global_debug_file))
-						LOG_DEBUG("[Logic] [any_of]  %u-<%s> is completed", this->children[i]->_unique_id, dst_to_tips(this->children[i]));
-				}
-			if (this->completed_id != -1)
+	{
+		if (ccf_unlikely(global_debug_file))
+			LOG_DEBUG("[Logic] [any_of]  %u-<%s> is waiting for any of %u task%s",
+				this->_unique_id, src_to_tips(this), this->num, this->num>1? "s": "");
+		if (!__task_yield(this))
+			return;
+		for (uint32 i=0; i<this->num; i++)
+			if (task_get_status(this->children[i]) == completed)
+			{
+				this->completed_id = i;
 				break;
-			if (!__task_yield(this))
-				return;
-		}
+			}
+	}
 	
 	__task_cancel_children(this, this->children, this->num);
 }
