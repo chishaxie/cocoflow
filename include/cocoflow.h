@@ -129,6 +129,7 @@ private:
 	friend inline void __task_stand(event_task*);
 	friend inline void __task_start_child(event_task*, event_task*);
 	friend inline void __task_cancel_children(event_task*, event_task**, uint32);
+	friend inline const char* __task_to_tips(const event_task*, char*, bool);
 	template<uint32 UP, uint32 PP> friend inline int await(task<UP, PP>&);
 	friend class all_of;
 	friend class any_of;

@@ -91,6 +91,8 @@ inline void __task_cancel_children(event_task* cur, event_task** children, uint3
 			CHECK(__task_yield(cur) == true);
 			unsupport --;
 		}
+		if (ccf_unlikely(global_debug_file))
+			LOG_DEBUG("[Logic] [any_of]  %u-<%s> completed its goal for uninterruptable tasks", cur->_unique_id, src_to_tips(cur));
 	}
 }
 
@@ -149,7 +151,7 @@ void __task_runtime(uint32 _unique_id)
 		task_set_status(this_task, running);
 		try {
 			this_task->run();
-		} catch (interrupt_canceled& sig) {
+		} catch (interrupt_canceled&) {
 			task_set_status(this_task, canceled);
 			this_task->cancel();
 		}
@@ -363,6 +365,9 @@ void all_of::run()
 			return;
 		count --;
 	}
+	
+	if (ccf_unlikely(global_debug_file))
+		LOG_DEBUG("[Logic] [all_of]  %u-<%s> completed its goal", this->_unique_id, src_to_tips(this));
 }
 
 void all_of::cancel()
@@ -432,6 +437,9 @@ void any_of::run()
 				break;
 			}
 	}
+	
+	if (ccf_unlikely(global_debug_file))
+		LOG_DEBUG("[Logic] [any_of]  %u-<%s> completed its goal", this->_unique_id, src_to_tips(this));
 	
 	__task_cancel_children(this, this->children, this->num);
 }

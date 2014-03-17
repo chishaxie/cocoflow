@@ -38,6 +38,7 @@ extern "C" {
 	} while(0)
 #else
 	#pragma warning(disable:4996)
+	#pragma warning(disable:4390)
 	#define FATAL_ERROR(fmt, ...) \
 	do { \
 		fprintf(stderr, "[FATAL]: " fmt "\n", __VA_ARGS__); \
@@ -136,24 +137,44 @@ extern FILE*        global_debug_file;
 extern char         global_debug_output_src[CLASS_TIPS_MAX_LEN];
 extern char         global_debug_output_dst[CLASS_TIPS_MAX_LEN];
 
-static inline const char* et_to_tips(const event_task* et, char* tips)
+inline const char* __task_to_tips(const event_task* et, char* tips, bool show_reuse = false)
 {
 	if (et != NULL)
 	{
+		if (!show_reuse || !et->reuse)
+		{
 #if defined(__GNUG__)
-		size_t len = CLASS_TIPS_MAX_LEN;
-		abi::__cxa_demangle(typeid(*et).name(), tips, &len, NULL);
+			size_t len = CLASS_TIPS_MAX_LEN;
+			abi::__cxa_demangle(typeid(*et).name(), tips, &len, NULL);
 #else
-		strcpy(tips, typeid(*et).name());
+			strcpy(tips, typeid(*et).name());
 #endif
+		}
+		else
+		{
+			const event_task* reuse = et->reuse;
+			while (reuse->reuse)
+				reuse = reuse->reuse;
+#if defined(__GNUG__)
+			char* _t0 = abi::__cxa_demangle(typeid(*et).name(), NULL, NULL, NULL);
+			char* _t1 = abi::__cxa_demangle(typeid(*reuse).name(), NULL, NULL, NULL);
+			sprintf(tips, "%s|%s", _t0, _t1);
+			free(_t0);
+			free(_t1);
+#else
+			sprintf(tips, "%s|%s", typeid(*et).name(), typeid(*reuse).name());
+#endif
+		}
 	}
 	else
 		strcpy(tips, "???");
 	return tips;
 }
 
-#define src_to_tips(src) et_to_tips(src, global_debug_output_src)
-#define dst_to_tips(dst) et_to_tips(dst, global_debug_output_dst)
+#define src_to_tips(src)      __task_to_tips(src, global_debug_output_src)
+#define dst_to_tips(dst)      __task_to_tips(dst, global_debug_output_dst)
+#define src_to_tips_pro(src)  __task_to_tips(src, global_debug_output_src, true)
+#define dst_to_tips_pro(dst)  __task_to_tips(dst, global_debug_output_dst, true)
 
 static inline uv_loop_t* loop()
 {
@@ -179,11 +200,11 @@ static inline void swap_running(uint32 cur, uint32 next)
 	if (ccf_unlikely(global_debug_file))
 	{
 		if (cur == EVENT_LOOP_ID)
-			LOG_DEBUG("[Switch]          EventLoop -> %u-<%s>", next, dst_to_tips(global_task_manager[next]));
+			LOG_DEBUG("[Switch]          EventLoop -> %u-<%s>", next, dst_to_tips_pro(global_task_manager[next]));
 		else if (next == EVENT_LOOP_ID)
-			LOG_DEBUG("[Switch]          %u-<%s> -> EventLoop", cur, src_to_tips(global_task_manager[cur]));
+			LOG_DEBUG("[Switch]          %u-<%s> -> EventLoop", cur, src_to_tips_pro(global_task_manager[cur]));
 		else
-			LOG_DEBUG("[Switch]          %u-<%s> -> %u-<%s>", cur, src_to_tips(global_task_manager[cur]), next, dst_to_tips(global_task_manager[next]));
+			LOG_DEBUG("[Switch]          %u-<%s> -> %u-<%s>", cur, src_to_tips_pro(global_task_manager[cur]), next, dst_to_tips_pro(global_task_manager[next]));
 	}
 	coroutine_switch(cur_runing, next_runing, cur, next);
 	global_current_task = (cur == EVENT_LOOP_ID) ? (NULL) : (global_task_manager[cur]);
@@ -204,12 +225,7 @@ inline bool __task_yield(event_task* cur)
 			throw interrupt_canceled(0);
 		}
 		else
-		{
 			cur->cancel();
-			if (ccf_unlikely(global_debug_file))
-				LOG_DEBUG("[Logic] [any_of]  %u-<%s> is canceled",
-					cur->_unique_id, dst_to_tips(cur));
-		}
 		return false;
 	}
 	else
