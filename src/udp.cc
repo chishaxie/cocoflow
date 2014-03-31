@@ -155,9 +155,12 @@ void udp::udp_recv_cb0(uv_udp_t* handle, ssize_t nread, uv_buf_t buf, struct soc
 		else
 			obj->cur_alloc->addr.sin6_family = addr->sa_family;
 		obj->cur_alloc->len = nread;
+		if (!obj->cur_alloc->buf || !obj->cur_alloc->len)
+			udp::routing_len = nread; //data in udp::routing_buf
 		event_task* target = obj->cur_alloc;
 		obj->cur_alloc = NULL;
 		__task_stand(target);
+		udp::routing_len = 0;
 		if (obj == reinterpret_cast<udp*>(handle->data)) //Check valid
 		{
 			if (obj->recv_queue.empty())
