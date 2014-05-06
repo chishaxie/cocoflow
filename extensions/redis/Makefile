@@ -3,7 +3,7 @@ CX = g++
 
 LIB = ../../lib/libccf-redis.a
 
-HIREDIS_DEPS=../../deps/hiredis-0.11.0u
+HIREDIS_DEPS=../../deps/hiredis-0.11.0u2
 
 HIREDIS_OBJ = net.o hiredis.o sds.o async.o
 HIREDIS_OBJ_DEPS = $(HIREDIS_DEPS)/net.o $(HIREDIS_DEPS)/hiredis.o $(HIREDIS_DEPS)/sds.o $(HIREDIS_DEPS)/async.o
@@ -26,7 +26,7 @@ cocoflow-redis.o: cocoflow-redis.cc ../../src/cocoflow-comm.h ../../include/coco
 	
 $(HIREDIS_OBJ_DEPS): $(HIREDIS_DEPS).zip
 	@echo "Dependency analysis ..."
-	@cd ../../deps/; unzip hiredis-0.11.0u.zip > /dev/null; cd ../extensions/redis/
+	@cd ../../deps/; unzip hiredis-0.11.0u2.zip > /dev/null; cd ../extensions/redis/
 	@echo "Compiling hiredis ..."
 	@make -C $(HIREDIS_DEPS) > /dev/null
 	@echo "Compiled hiredis"

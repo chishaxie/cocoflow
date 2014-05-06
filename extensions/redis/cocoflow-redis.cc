@@ -62,7 +62,7 @@ void redis::connect::run()
 			*this->ret = reinterpret_cast<redisAsyncContext*>(this->handle.context)->err;
 		return;
 	}
-	CHECK(redisLibuvAttach(loop(), reinterpret_cast<redisAsyncContext*>(this->handle.context)) == REDIS_OK);
+	CHECK(redisLibuvAttach(reinterpret_cast<redisAsyncContext*>(this->handle.context), loop()) == REDIS_OK);
 	reinterpret_cast<redisAsyncContext*>(this->handle.context)->data = this;
 	CHECK(redisAsyncSetConnectCallback(reinterpret_cast<redisAsyncContext*>(this->handle.context), redis::connect_cb) == REDIS_OK);
 	(void)__task_yield(this);
