@@ -13,11 +13,25 @@ extern "C" {
 
 namespace ccf {
 
+#define RECONNECT_INTERVAL_MIN  10
+#define RECONNECT_INTERVAL_MAX  10000
+
 /***** redis *****/
 
 redis::redis()
-	: context(NULL)
+	: context(NULL), timer(NULL), cur_reconnect_interval(0), timeout(0)
 {
+}
+
+int redis::auto_connect(const char* ip, int port, int timeout)
+{
+	CHECK(this->context == NULL);
+	CHECK(ip != NULL);
+	CHECK(timeout > 0);
+	this->ip = ip;
+	this->port = port;
+	this->timeout = timeout;
+	return this->connect_now(false);
 }
 
 const char* redis::errstr()
@@ -31,7 +45,87 @@ const char* redis::errstr()
 redis::~redis()
 {
 	if (this->context)
-		redisAsyncDisconnect(reinterpret_cast<redisAsyncContext*>(this->context));
+	{
+		reinterpret_cast<redisAsyncContext*>(this->context)->data = NULL;
+		redisAsyncFree(reinterpret_cast<redisAsyncContext*>(this->context));
+		if (this->timer)
+			uv_close(reinterpret_cast<uv_handle_t*>(this->timer), free_self_close_cb);
+	}
+}
+
+int redis::connect_now(bool always_return_zero)
+{
+	this->context = redisAsyncConnect(this->ip.c_str(), this->port);
+	if (always_return_zero)
+		CHECK(reinterpret_cast<redisAsyncContext*>(this->context)->err == REDIS_OK);
+	else if (reinterpret_cast<redisAsyncContext*>(this->context)->err != REDIS_OK)
+		return reinterpret_cast<redisAsyncContext*>(this->context)->err;
+	CHECK(redisLibuvAttach(reinterpret_cast<redisAsyncContext*>(this->context), loop()) == REDIS_OK);
+	reinterpret_cast<redisAsyncContext*>(this->context)->data = this;
+	CHECK(redisAsyncSetConnectCallback(reinterpret_cast<redisAsyncContext*>(this->context), redis::auto_connect_cb) == REDIS_OK);
+	CHECK(redisAsyncSetDisconnectCallback(reinterpret_cast<redisAsyncContext*>(this->context), redis::auto_connect_closed_cb) == REDIS_OK);
+	
+	this->timer = malloc(sizeof(uv_timer_t));
+	CHECK(this->timer != NULL);
+	CHECK(uv_timer_init(loop(), reinterpret_cast<uv_timer_t*>(this->timer)) == 0);
+	reinterpret_cast<uv_timer_t*>(this->timer)->data = this;
+	CHECK(uv_timer_start(reinterpret_cast<uv_timer_t*>(this->timer), redis::auto_connect_timeout_cb, this->timeout, 0) == 0);
+	return 0;
+}
+
+int redis::connect_coming(bool old_opened)
+{
+	this->old_opened = old_opened;
+	if (this->cur_reconnect_interval == 0)
+		this->cur_reconnect_interval = RECONNECT_INTERVAL_MIN;
+	else
+		this->cur_reconnect_interval *= 2;
+	if (this->cur_reconnect_interval > RECONNECT_INTERVAL_MAX)
+		this->cur_reconnect_interval = RECONNECT_INTERVAL_MAX;
+	this->timer = malloc(sizeof(uv_timer_t));
+	CHECK(this->timer != NULL);
+	CHECK(uv_timer_init(loop(), reinterpret_cast<uv_timer_t*>(this->timer)) == 0);
+	reinterpret_cast<uv_timer_t*>(this->timer)->data = this;
+	CHECK(uv_timer_start(reinterpret_cast<uv_timer_t*>(this->timer), redis::auto_reconnect_next_cb, this->cur_reconnect_interval, 0) == 0);
+	return 0;
+}
+
+void redis::auto_connect_cb(const redisAsyncContext *c, int status)
+{
+	redis* _this = reinterpret_cast<redis*>(c->data);
+	uv_close(reinterpret_cast<uv_handle_t*>(_this->timer), free_self_close_cb);
+	if (status == REDIS_OK)
+		_this->cur_reconnect_interval = 0;
+	else
+		_this->connect_coming(true);
+}
+
+void redis::auto_connect_closed_cb(const redisAsyncContext *c, int status)
+{
+	if (reinterpret_cast<redis*>(c->data) != NULL)
+	{
+		redis* _this = reinterpret_cast<redis*>(c->data);
+		_this->connect_coming(false);
+	}
+}
+
+void redis::auto_connect_timeout_cb(uv_timer_t* req, int status)
+{
+	redis* _this = reinterpret_cast<redis*>(req->data);
+	uv_close(reinterpret_cast<uv_handle_t*>(_this->timer), free_self_close_cb);
+	_this->connect_coming(true);
+}
+
+void redis::auto_reconnect_next_cb(uv_timer_t* req, int status)
+{
+	redis* _this = reinterpret_cast<redis*>(req->data);
+	uv_close(reinterpret_cast<uv_handle_t*>(_this->timer), free_self_close_cb);
+	if (_this->old_opened) //Delay free (handle always valid)
+	{
+		reinterpret_cast<redisAsyncContext*>(_this->context)->data = NULL;
+		redisAsyncFree(reinterpret_cast<redisAsyncContext*>(_this->context));
+	}
+	_this->connect_now(true);
 }
 
 /***** redis.connect *****/

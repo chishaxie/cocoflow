@@ -46,6 +46,7 @@ extern "C" {
 	typedef struct uv_stream_s uv_stream_t;
 	typedef struct uv_tcp_s uv_tcp_t;
 	typedef struct uv_udp_s uv_udp_t;
+	typedef struct uv_timer_s uv_timer_t;
 	typedef struct uv_async_s uv_async_t;
 	typedef struct uv_write_s uv_write_t;
 	typedef struct uv_connect_s uv_connect_t;

@@ -75,11 +75,24 @@ public:
 	};
 	redis();
 	~redis();
+	int auto_connect(const char* ip, int port, int timeout = 2000); //ms
 	const char* errstr();
 private:
 	void* context;
+	void* timer; //for connect
+	int cur_reconnect_interval;
+	int timeout;
+	std::string ip;
+	int port;
+	bool old_opened; //connect new need close old
+	int connect_now(bool);
+	int connect_coming(bool);
 	static void connect_cb(const struct redisAsyncContext*, int);
 	static void command_cb(struct redisAsyncContext*, void*, void*);
+	static void auto_connect_cb(const struct redisAsyncContext*, int);
+	static void auto_connect_closed_cb(const struct redisAsyncContext*, int);
+	static void auto_connect_timeout_cb(uv_timer_t*, int);
+	static void auto_reconnect_next_cb(uv_timer_t*, int);
 };
 
 } /* end of namespace ccf */

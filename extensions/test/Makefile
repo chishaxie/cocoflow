@@ -2,7 +2,7 @@ C_ARGS = -g -Wall -O2
 CX = g++
 
 LIB = ../../lib/libuv.a ../../lib/libccf.a
-BIN = test_redis
+BIN = test_redis test_redis2
 
 LIB_ARGS = -L../../lib -lccf -luv -lpthread -lrt
 INC_ARGS = -I../../include
@@ -19,7 +19,9 @@ $(LIB_REDIS):
 	make -C ../redis/
 	
 test_redis: test_redis.cc $(LIB) $(LIB_REDIS)
-	$(CX) $(C_ARGS) -o $@ test_redis.cc $(LIB_ARGS) $(LIB_REDIS_ARGS) $(INC_ARGS)	
+	$(CX) $(C_ARGS) -o $@ test_redis.cc $(LIB_ARGS) $(LIB_REDIS_ARGS) $(INC_ARGS)
+test_redis2: test_redis2.cc $(LIB) $(LIB_REDIS)
+	$(CX) $(C_ARGS) -o $@ test_redis2.cc $(LIB_ARGS) $(LIB_REDIS_ARGS) $(INC_ARGS)
 
 .PHONY: clean
 clean:
