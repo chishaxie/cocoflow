@@ -35,7 +35,17 @@ static void show_reply(const redisReply *reply)
 		cout << "bug" << endl;
 		break;
 	}
-};
+}
+
+static void connect_succeed(ccf::redis&, void*)
+{
+	cerr << "connection succeed" << endl;
+}
+
+static void connect_failed(ccf::redis&, void*, ccf::redis::failed_type, const char *message)
+{
+	cerr << message << endl;
+}
 
 class main_task: public ccf::user_task
 {
@@ -47,6 +57,7 @@ class main_task: public ccf::user_task
 		ccf::redis r;
 		
 		r.auto_connect("127.0.0.1", TEST_PORT);
+		r.set_auto_connect_callback(connect_succeed, connect_failed);
 		
 		{
 			ccf::redis::command rset(&ret, &reply, r, "SET %s %s", TEST_KEY, TEST_VAL);

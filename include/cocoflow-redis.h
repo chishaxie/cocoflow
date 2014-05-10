@@ -75,13 +75,25 @@ public:
 	};
 	redis();
 	~redis();
-	int auto_connect(const char* ip, int port, int timeout = 2000); //ms
 	const char* errstr();
+	int auto_connect(const char* ip, int port, int timeout = 2000); //ms
+	/* set_auto_connect_callback is only for log/monitor */
+	enum failed_type {
+		failed_exception = 1,  //an error occurred on connecting
+		failed_disconnect,     //connection is closed by peer
+		failed_timeout         //connecting timeout
+	};
+	typedef void auto_connect_succeed (redis& handle, void* data);
+	typedef void auto_connect_failed  (redis& handle, void* data, failed_type type, const char *message);
+	void set_auto_connect_callback(auto_connect_succeed* succeed, auto_connect_failed* failed, void* data = NULL);
 private:
 	void* context;
 	void* timer; //for connect
 	int cur_reconnect_interval;
 	int timeout;
+	auto_connect_succeed* succeed;
+	auto_connect_failed* failed;
+	void* data;
 	std::string ip;
 	int port;
 	bool old_opened; //connect new need close old

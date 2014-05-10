@@ -19,8 +19,17 @@ namespace ccf {
 /***** redis *****/
 
 redis::redis()
-	: context(NULL), timer(NULL), cur_reconnect_interval(0), timeout(0)
+	: context(NULL), timer(NULL), cur_reconnect_interval(0), timeout(0),
+	  succeed(NULL), failed(NULL), data(NULL)
 {
+}
+
+const char* redis::errstr()
+{
+	if (this->context)
+		return reinterpret_cast<redisAsyncContext*>(this->context)->errstr;
+	else
+		return "Uninitialized";
 }
 
 int redis::auto_connect(const char* ip, int port, int timeout)
@@ -34,12 +43,11 @@ int redis::auto_connect(const char* ip, int port, int timeout)
 	return this->connect_now(false);
 }
 
-const char* redis::errstr()
+void redis::set_auto_connect_callback(auto_connect_succeed* succeed, auto_connect_failed* failed, void* data)
 {
-	if (this->context)
-		return reinterpret_cast<redisAsyncContext*>(this->context)->errstr;
-	else
-		return "Uninitialized";
+	this->succeed = succeed;
+	this->failed = failed;
+	this->data = data;
 }
 
 redis::~redis()
@@ -95,9 +103,17 @@ void redis::auto_connect_cb(const redisAsyncContext *c, int status)
 	redis* _this = reinterpret_cast<redis*>(c->data);
 	uv_close(reinterpret_cast<uv_handle_t*>(_this->timer), free_self_close_cb);
 	if (status == REDIS_OK)
+	{
 		_this->cur_reconnect_interval = 0;
+		if (_this->succeed)
+			_this->succeed(*_this, _this->data);
+	}
 	else
+	{
+		if (_this->failed)
+			_this->failed(*_this, _this->data, redis::failed_exception, "an error occurred on connecting");
 		_this->connect_coming(true);
+	}
 }
 
 void redis::auto_connect_closed_cb(const redisAsyncContext *c, int status)
@@ -105,6 +121,8 @@ void redis::auto_connect_closed_cb(const redisAsyncContext *c, int status)
 	if (reinterpret_cast<redis*>(c->data) != NULL)
 	{
 		redis* _this = reinterpret_cast<redis*>(c->data);
+		if (_this->failed)
+			_this->failed(*_this, _this->data, redis::failed_disconnect, "connection is closed by peer");
 		_this->connect_coming(false);
 	}
 }
@@ -113,6 +131,8 @@ void redis::auto_connect_timeout_cb(uv_timer_t* req, int status)
 {
 	redis* _this = reinterpret_cast<redis*>(req->data);
 	uv_close(reinterpret_cast<uv_handle_t*>(_this->timer), free_self_close_cb);
+	if (_this->failed)
+		_this->failed(*_this, _this->data, redis::failed_timeout, "connecting timeout");
 	_this->connect_coming(true);
 }
 

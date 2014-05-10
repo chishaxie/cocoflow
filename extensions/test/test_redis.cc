@@ -37,7 +37,7 @@ static void show_reply(const redisReply *reply)
 		cout << "bug" << endl;
 		break;
 	}
-};
+}
 
 class main_task: public ccf::user_task
 {
