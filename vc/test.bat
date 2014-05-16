@@ -18,6 +18,8 @@ echo test tcp [3]
 (test_tcp3 > nul && echo Succeed) || echo Failed
 echo test tcp timing (lite)
 (unexpected_tcp_timing > nul && echo Succeed) || echo Failed
+echo test getaddrinfo
+(test_getaddrinfo > nul && echo Succeed) || echo Failed
 echo benchmark sleep
 (benchmark_sleep > nul && echo Succeed) || echo Failed
 echo benchmark udp (lite)

@@ -18,6 +18,7 @@
 	#endif
 #else
 # include <netinet/in.h>
+# include <netdb.h>
 #endif
 
 #include <list>
@@ -43,13 +44,14 @@ extern "C" {
 		} uv_buf_t;
 	#endif
 	typedef struct uv_handle_s uv_handle_t;
-	typedef struct uv_stream_s uv_stream_t;
-	typedef struct uv_tcp_s uv_tcp_t;
-	typedef struct uv_udp_s uv_udp_t;
 	typedef struct uv_timer_s uv_timer_t;
 	typedef struct uv_async_s uv_async_t;
-	typedef struct uv_write_s uv_write_t;
+	typedef struct uv_udp_s uv_udp_t;
+	typedef struct uv_tcp_s uv_tcp_t;
 	typedef struct uv_connect_s uv_connect_t;
+	typedef struct uv_stream_s uv_stream_t;
+	typedef struct uv_write_s uv_write_t;
+	typedef struct uv_getaddrinfo_s uv_getaddrinfo_t;
 #endif
 }
 
@@ -616,6 +618,29 @@ private:
 typedef recv_by_seq<> recv_by_seq_u32;
 
 } /* end of namespace tcp */
+
+class getaddrinfo : public event_task
+{
+public:
+	//Either node or service may be NULL but not both
+	getaddrinfo(int& ret, struct addrinfo** result, const char** errmsg,
+		const char* node, const char* service, const struct addrinfo* hints = NULL);
+	virtual ~getaddrinfo();
+	static void freeaddrinfo(struct addrinfo* result);
+private:
+	getaddrinfo(const getaddrinfo&);
+	getaddrinfo& operator=(const getaddrinfo&);
+	virtual void run();
+	virtual void cancel();
+	void *req;
+	int& ret;
+	struct addrinfo** result;
+	const char** errmsg;
+	const char* node;
+	const char* service;
+	const struct addrinfo* hints;
+	static void getaddrinfo_cb(uv_getaddrinfo_t*, int, struct addrinfo*);
+};
 
 struct sockaddr_in ip_to_addr(const char* ipv4, int port);
 struct sockaddr_in6 ip_to_addr6(const char* ipv6, int port);

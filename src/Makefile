@@ -11,7 +11,7 @@ INC_ARGS = -I../include
 
 all: $(LIB)
 
-../lib/libccf.a: cocoflow.o sleep.o sync.o udp.o tcp.o tools.o max_map_count.o
+../lib/libccf.a: cocoflow.o sleep.o sync.o udp.o tcp.o getaddrinfo.o tools.o max_map_count.o
 	ar cr $@ $^
 
 cocoflow.o: cocoflow.cc cocoflow-comm.h max_map_count.h ../include/cocoflow.h uv/uv.h
@@ -28,6 +28,9 @@ udp.o: udp.cc cocoflow-comm.h ../include/cocoflow.h uv/uv.h
 	
 tcp.o: tcp.cc cocoflow-comm.h ../include/cocoflow.h uv/uv.h
 	$(CX) $(C_ARGS) -fPIC -c -o $@ tcp.cc $(INC_ARGS)
+
+getaddrinfo.o: getaddrinfo.cc cocoflow-comm.h ../include/cocoflow.h uv/uv.h
+	$(CX) $(C_ARGS) -fPIC -c -o $@ getaddrinfo.cc $(INC_ARGS)
 	
 tools.o: tools.cc cocoflow-comm.h ../include/cocoflow.h uv/uv.h
 	$(CX) $(C_ARGS) -fPIC -c -o $@ tools.cc $(INC_ARGS)

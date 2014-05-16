@@ -35,6 +35,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_udp3", "test_udp3.vcpr
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "unexpected_tcp_timing", "unexpected_tcp_timing.vcproj", "{16A093DC-4FE3-42FA-90D5-55A23CDBE64F}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_getaddrinfo", "test_getaddrinfo.vcproj", "{6F67B98D-DFEB-4488-B5C0-2CABEAFEF5F3}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -179,6 +181,14 @@ Global
 		{16A093DC-4FE3-42FA-90D5-55A23CDBE64F}.Release|Win32.Build.0 = Release|Win32
 		{16A093DC-4FE3-42FA-90D5-55A23CDBE64F}.Release|Win64.ActiveCfg = Release|x64
 		{16A093DC-4FE3-42FA-90D5-55A23CDBE64F}.Release|Win64.Build.0 = Release|x64
+		{6F67B98D-DFEB-4488-B5C0-2CABEAFEF5F3}.Debug|Win32.ActiveCfg = Debug|Win32
+		{6F67B98D-DFEB-4488-B5C0-2CABEAFEF5F3}.Debug|Win32.Build.0 = Debug|Win32
+		{6F67B98D-DFEB-4488-B5C0-2CABEAFEF5F3}.Debug|Win64.ActiveCfg = Debug|x64
+		{6F67B98D-DFEB-4488-B5C0-2CABEAFEF5F3}.Debug|Win64.Build.0 = Debug|x64
+		{6F67B98D-DFEB-4488-B5C0-2CABEAFEF5F3}.Release|Win32.ActiveCfg = Release|Win32
+		{6F67B98D-DFEB-4488-B5C0-2CABEAFEF5F3}.Release|Win32.Build.0 = Release|Win32
+		{6F67B98D-DFEB-4488-B5C0-2CABEAFEF5F3}.Release|Win64.ActiveCfg = Release|x64
+		{6F67B98D-DFEB-4488-B5C0-2CABEAFEF5F3}.Release|Win64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

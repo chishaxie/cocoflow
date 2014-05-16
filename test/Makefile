@@ -3,7 +3,7 @@ CX = g++
 NO_CHECK = -Ddisable_check_seq_type
 
 LIB = ../lib/libuv.a ../lib/libccf.a
-BIN = test_primitive test_sleep test_udp test_udp2 test_udp3 test_tcp test_tcp2 test_tcp3 unexpected_tcp_timing benchmark_sleep benchmark_udp benchmark_udp2 benchmark_udp2_without_check_seq_type benchmark_tcp benchmark_tcp_without_check_seq_type
+BIN = test_primitive test_sleep test_udp test_udp2 test_udp3 test_tcp test_tcp2 test_tcp3 unexpected_tcp_timing test_getaddrinfo benchmark_sleep benchmark_udp benchmark_udp2 benchmark_udp2_without_check_seq_type benchmark_tcp benchmark_tcp_without_check_seq_type
 
 LIB_ARGS = -L../lib -lccf -luv -lpthread -lrt
 INC_ARGS = -I../include
@@ -40,6 +40,9 @@ test_tcp3: test_tcp3.cc $(LIB)
 unexpected_tcp_timing: unexpected_tcp_timing.cc $(LIB)
 	$(CX) $(C_ARGS) -o $@ unexpected_tcp_timing.cc $(LIB_ARGS) $(INC_ARGS)
 
+test_getaddrinfo: test_getaddrinfo.cc $(LIB)
+	$(CX) $(C_ARGS) -o $@ test_getaddrinfo.cc $(LIB_ARGS) $(INC_ARGS)
+	
 benchmark_sleep: benchmark_sleep.cc $(LIB)
 	$(CX) $(C_ARGS) -o $@ benchmark_sleep.cc $(LIB_ARGS) $(INC_ARGS)	
 
@@ -82,6 +85,8 @@ all_test: $(BIN)
 	@(./test_tcp3 > /dev/null && echo 'Succeed') || echo 'Failed'
 	@echo 'test tcp timing'
 	@(./unexpected_tcp_timing > /dev/null && echo 'Succeed') || echo 'Failed'
+	@echo 'test getaddrinfo'
+	@(./test_getaddrinfo > /dev/null && echo 'Succeed') || echo 'Failed'
 	@echo 'benchmark sleep'
 	@(./benchmark_sleep > /dev/null && echo 'Succeed') || echo 'Failed'
 	@echo 'benchmark udp'
