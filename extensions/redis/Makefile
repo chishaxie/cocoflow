@@ -18,7 +18,7 @@ all: $(LIB)
 $(HIREDIS_OBJ): $(HIREDIS_OBJ_DEPS)
 	cp $(HIREDIS_OBJ_DEPS) .
 
-cocoflow-redis.o: cocoflow-redis.cc ../../src/cocoflow-comm.h ../../include/cocoflow.h ../../src/uv/uv.h
+cocoflow-redis.o: cocoflow-redis.cc ../../src/cocoflow-comm.h ../../include/cocoflow.h ../../include/cocoflow-redis.h ../../src/uv/uv.h
 	$(CX) $(C_ARGS) -fPIC -c -o $@ cocoflow-redis.cc $(INC_ARGS)
 	
 ../../src/uv/uv.h:

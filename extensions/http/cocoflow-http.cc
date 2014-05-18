@@ -222,6 +222,132 @@ static int url_parse(const char *url,
 	return 0;
 }
 
+get::get(int &ret, const char **errmsg, const char *url, void *buf, size_t &len)
+	: ret(ret), errmsg(errmsg), url(url), buf(buf), len(len)
+{
+	CHECK(this->url != NULL);
+	this->ret = get::err_unfinished;
+	if (this->errmsg)
+		*this->errmsg = NULL;
+}
+
+void get::run()
+{
+	int ret;
+	const char *errmsg;
+	
+	/* url parse */
+	
+	std::string protocol;
+	std::string user;
+	std::string password;
+	std::string host;
+	int port;
+	std::string path;
+	std::string query;
+	std::string comment;
+	
+	ret = url_parse(this->url, protocol, user, password, host, port, path, query, comment);
+	if (ret)
+	{
+		this->ret = get::err_url_parse;
+		if (this->errmsg)
+		{
+			switch (ret)
+			{
+			case -1:
+				*this->errmsg = "Illegal character in protocol";
+				break;
+			case -2:
+				*this->errmsg = "Missing protocol";
+				break;
+			case -3:
+				*this->errmsg = "Missing \"//\"";
+				break;
+			case -4:
+			case -5:
+				*this->errmsg = "Illegal \":\"";
+				break;
+			case -6:
+				*this->errmsg = "Illegal \"@\"";
+				break;
+			case -7:
+				*this->errmsg = "Illegal character in host";
+				break;
+			case -8:
+				*this->errmsg = "Illegal character in port";
+				break;
+			case -9:
+				*this->errmsg = "Illegal value in port";
+				break;
+			default:
+				*this->errmsg = "Failed in url parse";
+				break;
+			}
+		}
+		return;
+	}
+	
+	if (protocol != "http")
+	{
+		this->ret = get::err_url_parse;
+		if (this->errmsg)
+			*this->errmsg = "Only supported protocol \"http\"";
+		return;
+	}
+	
+	if (!user.empty() || !password.empty())
+	{
+		this->ret = get::err_url_parse;
+		if (this->errmsg)
+			*this->errmsg = "Unsupported user/password";
+		return;
+	}
+
+	if (host.empty())
+	{
+		this->ret = get::err_url_parse;
+		if (this->errmsg)
+			*this->errmsg = "Missing host";
+		return;
+	}
+	
+	/* dns resolve */
+	
+	struct addrinfo *result;
+	struct addrinfo hints;
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_UNSPEC; //Allow IPv4 or IPv6
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_protocol = IPPROTO_TCP;
+	getaddrinfo dns(ret, &result, &errmsg, host.c_str(), NULL, &hints);
+	await(dns);
+	if (ret)
+	{
+		this->ret = get::err_dns_resolve;
+		if (this->errmsg)
+		{
+			if (errmsg && errmsg[0] != '\0')
+				*this->errmsg = errmsg;
+			else
+				*this->errmsg = "Failed in dns resolve";
+		}
+		return;
+	}
+	
+	getaddrinfo::freeaddrinfo(result);
+}
+
+void get::cancel()
+{
+	if (this->errmsg)
+		*this->errmsg = "It was canceled";
+}
+
+get::~get()
+{
+}
+
 }
 
 }

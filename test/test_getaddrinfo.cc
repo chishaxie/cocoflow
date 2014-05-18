@@ -38,17 +38,25 @@ class main_task: public ccf::user_task
 		await(server);
 		show(ret, result, errmsg);
 		
-		ccf::getaddrinfo dns(ret, &result, &errmsg, "www.qq.com", NULL);
+		ccf::getaddrinfo dns(ret, &result, &errmsg, "localhost", NULL);
 		await(dns);
 		show(ret, result, errmsg);
-		
-		ccf::getaddrinfo dns2(ret, &result, &errmsg, NULL, NULL);
+	
+		ccf::getaddrinfo dns2(ret, &result, &errmsg, "www.qq.com", NULL);
 		await(dns2);
 		show(ret, result, errmsg);
+	
+		ccf::getaddrinfo dns3(ret, &result, &errmsg, "127.0.0.1", NULL);
+		await(dns3);
+		show(ret, result, errmsg);
 		
-		ccf::getaddrinfo dns3(ret, &result, &errmsg, "www.qq.com", NULL);
+		ccf::getaddrinfo none(ret, &result, &errmsg, NULL, NULL);
+		await(none);
+		show(ret, result, errmsg);
+		
+		ccf::getaddrinfo dns4(ret, &result, &errmsg, "www.qq.com", NULL);
 		ccf::sleep s(0);
-		ccf::any_of any(dns3, s);
+		ccf::any_of any(dns4, s);
 		await(any);
 		show(ret, result, errmsg);
 	}
