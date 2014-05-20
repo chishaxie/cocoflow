@@ -7,6 +7,8 @@ namespace ccf {
 
 namespace http {
 
+#define HTTP_DEFAULT_PORT 80
+
 static char lowercase(char c)
 {
 	if (c >= 'A' && c <= 'Z')
@@ -314,28 +316,116 @@ void get::run()
 	
 	/* dns resolve */
 	
-	struct addrinfo *result;
-	struct addrinfo hints;
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_UNSPEC; //Allow IPv4 or IPv6
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_protocol = IPPROTO_TCP;
-	getaddrinfo dns(ret, &result, &errmsg, host.c_str(), NULL, &hints);
-	await(dns);
-	if (ret)
+	bool is_ipv4;
+	struct sockaddr_in ipv4;
+	struct sockaddr_in6 ipv6;
+	
 	{
-		this->ret = get::err_dns_resolve;
-		if (this->errmsg)
+		struct addrinfo *result;
+		struct addrinfo hints;
+		memset(&hints, 0, sizeof(hints));
+		hints.ai_family = AF_UNSPEC; //Allow IPv4 or IPv6
+		hints.ai_socktype = SOCK_STREAM;
+		hints.ai_protocol = IPPROTO_TCP;
+		getaddrinfo dns(ret, &result, &errmsg, host.c_str(), NULL, &hints);
+		await(dns);
+		if (ret)
 		{
-			if (errmsg && errmsg[0] != '\0')
-				*this->errmsg = errmsg;
-			else
-				*this->errmsg = "Failed in dns resolve";
+			this->ret = get::err_dns_resolve;
+			if (this->errmsg)
+			{
+				if (errmsg && errmsg[0] != '\0')
+					*this->errmsg = errmsg;
+				else
+					*this->errmsg = "Failed in dns resolve";
+			}
+			return;
 		}
+		
+		CHECK(result != NULL);
+		CHECK(result->ai_addr != NULL);
+		
+		if (result->ai_addr->sa_family == AF_INET)
+		{
+			is_ipv4 = true;
+			ipv4 = *reinterpret_cast<struct sockaddr_in *>(result->ai_addr);
+			ipv4.sin_port = htons(port? port: HTTP_DEFAULT_PORT);
+		}
+		else if (result->ai_addr->sa_family == AF_INET6)
+		{
+			is_ipv4 = false;
+			ipv6 = *reinterpret_cast<struct sockaddr_in6 *>(result->ai_addr);
+			ipv6.sin6_port = htons(port? port: HTTP_DEFAULT_PORT);
+		}
+		else
+			CHECK(0);
+		
+		getaddrinfo::freeaddrinfo(result);
+	}
+
+	/* connect */
+	
+	tcp::connected sock;
+	if (is_ipv4)
+	{
+		tcp::connect conn(ret, sock, ipv4);
+		await(conn);
+	}
+	else
+	{
+		tcp::connect conn(ret, sock, ipv6);
+		await(conn);
+	}
+	if (ret != tcp::success)
+	{
+		this->ret = get::err_connect;
+		if (this->errmsg)
+			*this->errmsg = "Failed in tcp connect";
 		return;
 	}
 	
-	getaddrinfo::freeaddrinfo(result);
+	/* send */
+	{
+		char header[4096];
+		int bytes;
+		if (port)
+			bytes = snprintf(header, sizeof(header),
+				"GET %s HTTP/1.1\r\n"
+				"Host: %s:%d\r\n"
+				"\r\n",
+				path.c_str(), host.c_str(), port);
+		else
+			bytes = snprintf(header, sizeof(header),
+				"GET %s HTTP/1.1\r\n"
+				"Host: %s\r\n"
+				"\r\n",
+				path.c_str(), host.c_str());
+		CHECK(bytes > 0 && bytes <= (int)sizeof(header));
+		ccf::tcp::send s(ret, sock, header, bytes);
+		await(s);
+		if (ret != tcp::success)
+		{
+			this->ret = get::err_request;
+			if (this->errmsg)
+				*this->errmsg = "Failed in http send header";
+			return;
+		}
+	}
+	
+	/* recv */
+	{
+		char header[4096];
+		size_t bytes = sizeof(header);
+		ccf::tcp::recv_till rt(ret, sock, header, bytes, "\r\n\r\n", 4);
+		await(rt);
+		if (ret != tcp::success)
+		{
+			this->ret = get::err_response;
+			if (this->errmsg)
+				*this->errmsg = "Failed in http recv header";
+			return;
+		}
+	}
 }
 
 void get::cancel()
