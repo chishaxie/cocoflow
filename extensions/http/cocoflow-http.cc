@@ -7,7 +7,10 @@ namespace ccf {
 
 namespace http {
 
-#define HTTP_DEFAULT_PORT 80
+#define HTTP_DEFAULT_PORT        80
+#define HTTP_FIELD_NAME_MAX_LEN  19
+
+/* url parse */
 
 static char lowercase(char c)
 {
@@ -224,11 +227,310 @@ static int url_parse(const char *url,
 	return 0;
 }
 
+/* http parse */
+
+//RFC 2616
+namespace header {
+
+enum field {
+	Unknown = 0,
+	Accept,
+	AcceptCharset,
+	AcceptEncoding,
+	AcceptLanguage,
+	AcceptRanges,
+	Age,
+	Allow,
+	Authorization,
+	CacheControl,
+	Connection,
+	ContentEncoding,
+	ContentLanguage,
+	ContentLength,
+	ContentLocation,
+	ContentMD5,
+	ContentRange,
+	ContentType,
+	Date,
+	ETag,
+	Expect,
+	Expires,
+	From,
+	Host,
+	IfMatch,
+	IfModifiedSince,
+	IfNoneMatch,
+	IfRange,
+	IfUnmodifiedSince,
+	LastModified,
+	Location,
+	MaxForwards,
+	Pragma,
+	ProxyAuthenticate,
+	ProxyAuthorization,
+	Range,
+	Referer,
+	RetryAfter,
+	Server,
+	TE,
+	Trailer,
+	TransferEncoding,
+	Upgrade,
+	UserAgent,
+	Vary,
+	Via,
+	Warning,
+	WWWAuthenticate
+};
+
+typedef struct {
+	const char *name;
+	field value;
+} field_seek_unit;
+
+const static field_seek_unit field_seek_arrays[] = {
+	{ "accept",               Accept             },
+	{ "accept-charset",       AcceptCharset      },
+	{ "accept-encoding",      AcceptEncoding     },
+	{ "accept-language",      AcceptLanguage     },
+	{ "accept-ranges",        AcceptRanges       },
+	{ "age",                  Age                },
+	{ "allow",                Allow              },
+	{ "authorization",        Authorization      },
+	{ "cache-control",        CacheControl       },
+	{ "connection",           Connection         },
+	{ "content-encoding",     ContentEncoding    },
+	{ "content-language",     ContentLanguage    },
+	{ "content-length",       ContentLength      },
+	{ "content-location",     ContentLocation    },
+	{ "content-md5",          ContentMD5         },
+	{ "content-range",        ContentRange       },
+	{ "content-type",         ContentType        },
+	{ "date",                 Date               },
+	{ "etag",                 ETag               },
+	{ "expect",               Expect             },
+	{ "expires",              Expires            },
+	{ "from",                 From               },
+	{ "host",                 Host               },
+	{ "if-match",             IfMatch            },
+	{ "if-modified-since",    IfModifiedSince    },
+	{ "if-none-match",        IfNoneMatch        },
+	{ "if-range",             IfRange            },
+	{ "if-unmodified-since",  IfUnmodifiedSince  },
+	{ "last-modified",        LastModified       },
+	{ "location",             Location           },
+	{ "max-forwards",         MaxForwards        },
+	{ "pragma",               Pragma             },
+	{ "proxy-authenticate",   ProxyAuthenticate  },
+	{ "proxy-authorization",  ProxyAuthorization },
+	{ "range",                Range              },
+	{ "referer",              Referer            },
+	{ "retry-after",          RetryAfter         },
+	{ "server",               Server             },
+	{ "te",                   TE                 },
+	{ "trailer",              Trailer            },
+	{ "transfer-encoding",    TransferEncoding   },
+	{ "upgrade",              Upgrade            },
+	{ "user-agent",           UserAgent          },
+	{ "vary",                 Vary               },
+	{ "via",                  Via                },
+	{ "warning",              Warning            },
+	{ "www-authenticate",     WWWAuthenticate    }
+};
+
+class field_seek_unit_comp
+{
+public:
+	bool operator()(const field_seek_unit &a, const field_seek_unit &b) const
+	{
+		return strcmp(a.name, b.name) < 0;
+	}
+};
+
+static field_seek_unit_comp field_comp;
+
+static field check_field(const char *name)
+{
+	field_seek_unit target;
+	target.name = name;
+	const field_seek_unit *ret = std::lower_bound(field_seek_arrays,
+		field_seek_arrays + sizeof(field_seek_arrays)/sizeof(field_seek_arrays[0]), target, field_comp);
+	if (ret != field_seek_arrays + sizeof(field_seek_arrays)/sizeof(field_seek_arrays[0]) && strcmp(ret->name, name) == 0)
+		return ret->value;
+	else
+		return Unknown;
+}
+
+}
+
+static int http_rsp_parse(const void *buf, size_t len,
+	const std::set<header::field> &needs,
+	int &status_code,
+	std::string &reason_phrase,
+	std::map<header::field, std::string> &header_fields)
+{
+	status_code = 0;
+	reason_phrase.clear();
+	header_fields.clear();
+	
+	const char *s = reinterpret_cast<const char *>(buf);
+	size_t i = 0;
+	size_t bgn, end;
+	
+	/* Status-Line */
+	
+	//HTTP-Version SP
+	if (len < 9)
+		return -1;
+	if (memcmp("HTTP/1.1 ", &s[i], 9) != 0)
+		return -1;
+	i += 9; //HTTP-Version SP
+	
+	//Status-Code SP
+	bgn = i;
+	for (; i < len; i++)
+	{
+		if (s[i] >= '0' && s[i] <= '9')
+			;
+		else if (s[i] == ' ')
+			break;
+		else
+			return -2;
+	}
+	if (i != bgn + 3 || i == len) //固定三字节
+		return -2;
+	status_code = atoi(&s[bgn]);
+	i ++; //SP
+	
+	//Reason-Phrase CRLF
+	bgn = i;
+	for (; i + 1 < len; i++)
+	{
+		if (s[i] == '\r' && s[i+1] == '\n')
+			break;
+		else if ((s[i] >= 'a' && s[i] <= 'z') || (s[i] >= 'A' && s[i] <= 'Z') || s[i] == ' ' || s[i] == '-')
+			;
+		else
+			return -3;
+	}
+	if (i == bgn || i + 1 == len)
+		return -3;
+	reason_phrase.append(bgn, i);
+	i += 2; //CRLF
+	
+	/* Response Header Fields */
+	for (;;)
+	{
+		if (i + 1 < len)
+		{
+			//CRLF (last)
+			if (s[i] == '\r' && s[i+1] == '\n')
+				break;
+			
+			char field_name[HTTP_FIELD_NAME_MAX_LEN + 1];
+			
+			//Key
+			bgn = i;
+			for (; i < len; i++)
+			{
+				if ((s[i] >= '0' && s[i] <= '9') ||
+					(s[i] >= 'a' && s[i] <= 'z') ||
+					(s[i] >= 'A' && s[i] <= 'Z') ||
+					s[i] == '-')
+					;
+				else if (s[i] == ':')
+					break;
+				else
+					return -5;
+			}
+			end = i;
+			if (end == bgn)
+				return -5;
+			if (end - bgn <= HTTP_FIELD_NAME_MAX_LEN)
+			{
+				memcpy(field_name, &s[bgn], end - bgn);
+				field_name[end - bgn] = '\0';
+				std::transform(field_name, field_name + end - bgn, field_name, lowercase);
+			}
+			else
+				field_name[0] = '\0';
+			i ++; //:
+			
+			//Value
+			for (; i < len; i++) //去除value的前缀空格
+			{
+				if (s[i] == ' ')
+					;
+				else
+					break;
+			}
+			bgn = i;
+			for (; i + 1 < len; i++)
+			{
+				if (s[i] == '\r' && s[i+1] == '\n')
+					break;
+				else
+					;
+			}
+			end = i;
+			while (end > bgn && s[end-1] == ' ') //去除value的后缀空格
+				;
+			i += 2; //CRLF
+			
+			//Put into header_fields
+			if (field_name[0] != '\0')
+			{
+				header::field cur = header::check_field(field_name);
+				if (cur != header::Unknown)
+				{
+					switch (cur)
+					{
+					case header::ContentLength:
+						if (end > bgn)
+						{
+							for (size_t j = bgn; j < end; j++)
+								if (s[j] >= '0' && s[j] <= '9')
+									;
+								else
+									return -6;
+						}
+						else
+							return -6;
+						break;
+					case header::TransferEncoding:
+						if (end - bgn == 7 && memcmp("chunked", &s[bgn], 7) == 0)
+							;
+						else
+							return -6;
+						break;
+					default:
+						break;
+					}
+					if (needs.count(cur) && end > bgn)
+					{
+						if (!header_fields.insert(std::pair<header::field, std::string>(cur, std::string(bgn, cur))).second)
+							return -7;
+					}
+				}
+			}
+		}
+		else
+			return -4;
+	}
+	i += 2; //CRLF
+	if (i != len)
+		return -4;
+	
+	return 0;
+}
+
+/* http::get */
+
 get::get(int &ret, const char **errmsg, const char *url, void *buf, size_t &len)
 	: ret(ret), errmsg(errmsg), url(url), buf(buf), len(len)
 {
 	CHECK(this->url != NULL);
-	this->ret = get::err_unfinished;
+	this->ret = unfinished;
 	if (this->errmsg)
 		*this->errmsg = NULL;
 }
@@ -252,7 +554,7 @@ void get::run()
 	ret = url_parse(this->url, protocol, user, password, host, port, path, query, comment);
 	if (ret)
 	{
-		this->ret = get::err_url_parse;
+		this->ret = err_url_parse;
 		if (this->errmsg)
 		{
 			switch (ret)
@@ -292,7 +594,7 @@ void get::run()
 	
 	if (protocol != "http")
 	{
-		this->ret = get::err_url_parse;
+		this->ret = err_url_parse;
 		if (this->errmsg)
 			*this->errmsg = "Only supported protocol \"http\"";
 		return;
@@ -300,7 +602,7 @@ void get::run()
 	
 	if (!user.empty() || !password.empty())
 	{
-		this->ret = get::err_url_parse;
+		this->ret = err_url_parse;
 		if (this->errmsg)
 			*this->errmsg = "Unsupported user/password";
 		return;
@@ -308,7 +610,7 @@ void get::run()
 
 	if (host.empty())
 	{
-		this->ret = get::err_url_parse;
+		this->ret = err_url_parse;
 		if (this->errmsg)
 			*this->errmsg = "Missing host";
 		return;
@@ -331,7 +633,7 @@ void get::run()
 		await(dns);
 		if (ret)
 		{
-			this->ret = get::err_dns_resolve;
+			this->ret = err_dns_resolve;
 			if (this->errmsg)
 			{
 				if (errmsg && errmsg[0] != '\0')
@@ -378,7 +680,7 @@ void get::run()
 	}
 	if (ret != tcp::success)
 	{
-		this->ret = get::err_connect;
+		this->ret = err_tcp_connect;
 		if (this->errmsg)
 			*this->errmsg = "Failed in tcp connect";
 		return;
@@ -405,7 +707,7 @@ void get::run()
 		await(s);
 		if (ret != tcp::success)
 		{
-			this->ret = get::err_request;
+			this->ret = err_send_request;
 			if (this->errmsg)
 				*this->errmsg = "Failed in http send header";
 			return;
@@ -420,9 +722,67 @@ void get::run()
 		await(rt);
 		if (ret != tcp::success)
 		{
-			this->ret = get::err_response;
+			this->ret = err_recv_response;
 			if (this->errmsg)
 				*this->errmsg = "Failed in http recv header";
+			return;
+		}
+		
+		//TODO
+		header[bytes] = '\0';
+		printf("%s", header);
+		
+		//http response parse
+		std::set<header::field> needs;
+		int status_code;
+		std::string reason_phrase;
+		std::map<header::field, std::string> header_fields;
+		
+		needs.insert(header::ContentLength);
+		needs.insert(header::TransferEncoding);
+		
+		ret = http_rsp_parse(header, bytes, needs, status_code, reason_phrase, header_fields);
+		if (ret)
+		{
+			this->ret = err_response_header_parse;
+			if (this->errmsg)
+			{
+				switch (ret)
+				{
+				case -1:
+					*this->errmsg = "Illegal http version";
+					break;
+				case -2:
+					*this->errmsg = "Illegal status code";
+					break;
+				case -3:
+					*this->errmsg = "Illegal reason phrase";
+					break;
+				case -4:
+					*this->errmsg = "Illegal header end";
+					break;
+				case -5:
+					*this->errmsg = "Illegal field key";
+					break;
+				case -6:
+					*this->errmsg = "Illegal field value";
+					break;
+				case -7:
+					*this->errmsg = "Duplicate field";
+					break;
+				default:
+					*this->errmsg = "Failed in http response parse";
+					break;
+				}
+			}
+			return;
+		}
+		
+		if (!header_fields.count(header::ContentLength) && !header_fields.count(header::TransferEncoding))
+		{
+			this->ret = err_response_header_parse;
+			if (this->errmsg)
+				*this->errmsg = "Missing \"Content-Length\"/\"Transfer-Encoding\"";
 			return;
 		}
 	}
