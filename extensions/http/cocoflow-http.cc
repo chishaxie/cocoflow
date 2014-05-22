@@ -10,6 +10,10 @@ namespace http {
 #define HTTP_DEFAULT_PORT        80
 #define HTTP_FIELD_NAME_MAX_LEN  19
 
+#if defined(_WIN32) || defined(_WIN64)
+# define snprintf _snprintf
+#endif
+
 /* url parse */
 
 static char lowercase(char c)
@@ -51,18 +55,18 @@ static int url_parse(const char *url,
 			*p == '.' || *p == '+' || *p == '-')
 			;
 		else
-			return -1; //协议非法字符
+			return -1;
 		p ++;
 	}
 	
 	if (!*p || p == url)
-		return -2; //无协议
+		return -2;
 	
 	protocol.append(url, p);
 	std::transform(protocol.begin(), protocol.end(), protocol.begin(), lowercase);
 	
 	if (*(p+1) != '/' || *(p+2) != '/')
-		return -3; //缺少//
+		return -3;
 	p += 3;
 	
 	/* user:password@host:port */
@@ -107,7 +111,7 @@ static int url_parse(const char *url,
 				if (!user_end)
 					user_end = p;
 				else
-					return -4; //非法的:
+					return -4;
 				pass_bgn = p + 1;
 			}
 			else
@@ -115,7 +119,7 @@ static int url_parse(const char *url,
 				if (!host_end)
 					host_end = p;
 				else
-					return -5; //非法的:
+					return -5;
 				port_bgn = p + 1;
 			}
 		}
@@ -126,7 +130,7 @@ static int url_parse(const char *url,
 			else if (pass_bgn && !pass_end)
 				pass_end = p;
 			else
-				return -6; //非法的@
+				return -6;
 			host_bgn = p + 1;
 		}
 	}
@@ -145,7 +149,7 @@ static int url_parse(const char *url,
 				*i == '.' || *i == '_' || *i == '-')
 				;
 			else
-				return -7; //host非法字符
+				return -7;
 		}
 		host.append(host_bgn, host_end);
 		std::transform(host.begin(), host.end(), host.begin(), lowercase);
@@ -157,11 +161,11 @@ static int url_parse(const char *url,
 			if (*i >= '0' && *i <= '9')
 				;
 			else
-				return -8; //port非法字符
+				return -8;
 		}
 		port = atoi(port_bgn);
 		if (port <= 0 || port > 65535)
-			return -9; //port非法值
+			return -9;
 	}
 	
 	/* /path?query#comment */
@@ -361,6 +365,77 @@ static field check_field(const char *name)
 		return Unknown;
 }
 
+typedef struct {
+	short status_code;
+	const char *reason_phrase;
+} status_seek_unit;
+
+const static status_seek_unit status_seek_arrays[] = {
+	{ Continue,                      "Continue"                        },
+	{ SwitchingProtocols,            "Switching Protocols"             },
+	{ OK,                            "OK"                              },
+	{ Created,                       "Created"                         },
+	{ Accepted,                      "Accepted"                        },
+	{ NonAuthoritativeInformation,   "Non-Authoritative Information"   },
+	{ NoContent,                     "No Content"                      },
+	{ ResetContent,                  "Reset Content"                   },
+	{ PartialContent,                "Partial Content"                 },
+	{ MultipleChoices,               "Multiple Choices"                },
+	{ MovedPermanently,              "Moved Permanently"               },
+	{ Found,                         "Found"                           },
+	{ SeeOther,                      "See Other"                       },
+	{ NotModified,                   "Not Modified"                    },
+	{ UseProxy,                      "Use Proxy"                       },
+	{ TemporaryRedirect,             "Temporary Redirect"              },
+	{ BadRequest,                    "Bad Request"                     },
+	{ Unauthorized,                  "Unauthorized"                    },
+	{ PaymentRequired,               "Payment Required"                },
+	{ Forbidden,                     "Forbidden"                       },
+	{ NotFound,                      "Not Found"                       },
+	{ MethodNotAllowed,              "Method Not Allowed"              },
+	{ NotAcceptable,                 "Not Acceptable"                  },
+	{ ProxyAuthenticationRequired,   "Proxy Authentication Required"   },
+	{ RequestTimeout,                "Request Timeout"                 },
+	{ Conflict,                      "Conflict"                        },
+	{ Gone,                          "Gone"                            },
+	{ LengthRequired,                "Length Required"                 },
+	{ PreconditionFailed,            "Precondition Failed"             },
+	{ RequestEntityTooLarge,         "Request Entity Too Large"        },
+	{ RequestURITooLong,             "Request-URI Too Long"            },
+	{ UnsupportedMediaType,          "Unsupported Media Type"          },
+	{ RequestedRangeNotSatisfiable,  "Requested Range Not Satisfiable" },
+	{ ExpectationFailed,             "Expectation Failed"              },
+	{ InternalServerError,           "Internal Server Error"           },
+	{ NotImplemented,                "Not Implemented"                 },
+	{ BadGateway,                    "Bad Gateway"                     },
+	{ ServiceUnavailable,            "Service Unavailable"             },
+	{ GatewayTimeout,                "Gateway Timeout"                 },
+	{ HTTPVersionNotSupported,       "HTTP Version Not Supported"      }
+};
+
+class status_seek_unit_comp
+{
+public:
+	bool operator()(const status_seek_unit &a, const status_seek_unit &b) const
+	{
+		return a.status_code < b.status_code;
+	}
+};
+
+static status_seek_unit_comp status_comp;
+
+static const char *check_status(short status_code)
+{
+	status_seek_unit target;
+	target.status_code = status_code;
+	const status_seek_unit *ret = std::lower_bound(status_seek_arrays,
+		status_seek_arrays + sizeof(status_seek_arrays)/sizeof(status_seek_arrays[0]), target, status_comp);
+	if (ret != status_seek_arrays + sizeof(status_seek_arrays)/sizeof(status_seek_arrays[0]) && ret->status_code == status_code)
+		return ret->reason_phrase;
+	else
+		return "Unknown";
+}
+
 }
 
 static int http_rsp_parse(const void *buf, size_t len,
@@ -397,7 +472,7 @@ static int http_rsp_parse(const void *buf, size_t len,
 		else
 			return -2;
 	}
-	if (i != bgn + 3 || i == len) //固定三字节
+	if (i != bgn + 3 || i == len) //[0-9]{3}
 		return -2;
 	status_code = atoi(&s[bgn]);
 	i ++; //SP
@@ -415,7 +490,7 @@ static int http_rsp_parse(const void *buf, size_t len,
 	}
 	if (i == bgn || i + 1 == len)
 		return -3;
-	reason_phrase.append(bgn, i);
+	reason_phrase.append(&s[bgn], &s[i]);
 	i += 2; //CRLF
 	
 	/* Response Header Fields */
@@ -457,7 +532,7 @@ static int http_rsp_parse(const void *buf, size_t len,
 			i ++; //:
 			
 			//Value
-			for (; i < len; i++) //去除value的前缀空格
+			for (; i < len; i++) //trim prefix
 			{
 				if (s[i] == ' ')
 					;
@@ -473,7 +548,7 @@ static int http_rsp_parse(const void *buf, size_t len,
 					;
 			}
 			end = i;
-			while (end > bgn && s[end-1] == ' ') //去除value的后缀空格
+			while (end > bgn && s[end-1] == ' ') //trim suffix
 				;
 			i += 2; //CRLF
 			
@@ -508,7 +583,9 @@ static int http_rsp_parse(const void *buf, size_t len,
 					}
 					if (needs.count(cur) && end > bgn)
 					{
-						if (!header_fields.insert(std::pair<header::field, std::string>(cur, std::string(bgn, cur))).second)
+						if (!header_fields.insert(
+								std::pair<header::field, std::string>(cur, std::string(&s[bgn], &s[end]))
+							).second)
 							return -7;
 					}
 				}
@@ -524,12 +601,50 @@ static int http_rsp_parse(const void *buf, size_t len,
 	return 0;
 }
 
+static int http_chunk_parse(const void *buf, size_t len,
+	size_t &chunk_len)
+{
+	chunk_len = 0;
+	
+	const char *s = reinterpret_cast<const char *>(buf);
+	size_t i = 0;
+	size_t bgn;
+	
+	bgn = i;
+	for (; i + 1 < len; i++)
+	{
+		if ((s[i] == '\r' && s[i+1] == '\n') || s[i] == ';') //; for chunk-extension
+			break;
+		else if ((s[i] >= '0' && s[i] <= '9') ||
+			(s[i] >= 'a' && s[i] <= 'f') ||
+			(s[i] >= 'A' && s[i] <= 'F'))
+			;
+		else
+			return -1;
+	}
+	if (i == bgn || i + 1 == len)
+		return -1;
+	
+	sscanf(&s[bgn], "%zx", &chunk_len);
+	
+	return 0;
+}
+
+const static header::field needs_array[] = {
+	header::ContentLength,
+	header::TransferEncoding
+};
+
+const static std::set<header::field> needs(needs_array, needs_array + sizeof(needs_array)/sizeof(needs_array[0]));
+
 /* http::get */
 
 get::get(int &ret, const char **errmsg, const char *url, void *buf, size_t &len)
 	: ret(ret), errmsg(errmsg), url(url), buf(buf), len(len)
 {
 	CHECK(this->url != NULL);
+	if (this->len != 0)
+		CHECK(this->buf != NULL);
 	this->ret = unfinished;
 	if (this->errmsg)
 		*this->errmsg = NULL;
@@ -554,6 +669,7 @@ void get::run()
 	ret = url_parse(this->url, protocol, user, password, host, port, path, query, comment);
 	if (ret)
 	{
+		this->len = 0;
 		this->ret = err_url_parse;
 		if (this->errmsg)
 		{
@@ -594,6 +710,7 @@ void get::run()
 	
 	if (protocol != "http")
 	{
+		this->len = 0;
 		this->ret = err_url_parse;
 		if (this->errmsg)
 			*this->errmsg = "Only supported protocol \"http\"";
@@ -602,6 +719,7 @@ void get::run()
 	
 	if (!user.empty() || !password.empty())
 	{
+		this->len = 0;
 		this->ret = err_url_parse;
 		if (this->errmsg)
 			*this->errmsg = "Unsupported user/password";
@@ -610,6 +728,7 @@ void get::run()
 
 	if (host.empty())
 	{
+		this->len = 0;
 		this->ret = err_url_parse;
 		if (this->errmsg)
 			*this->errmsg = "Missing host";
@@ -633,6 +752,7 @@ void get::run()
 		await(dns);
 		if (ret)
 		{
+			this->len = 0;
 			this->ret = err_dns_resolve;
 			if (this->errmsg)
 			{
@@ -680,6 +800,7 @@ void get::run()
 	}
 	if (ret != tcp::success)
 	{
+		this->len = 0;
 		this->ret = err_tcp_connect;
 		if (this->errmsg)
 			*this->errmsg = "Failed in tcp connect";
@@ -688,25 +809,38 @@ void get::run()
 	
 	/* send */
 	{
-		char header[4096];
+		char tmp[4096];
 		int bytes;
-		if (port)
-			bytes = snprintf(header, sizeof(header),
+		if (port && !query.empty())
+			bytes = snprintf(tmp, sizeof(tmp),
+				"GET %s?%s HTTP/1.1\r\n"
+				"Host: %s:%d\r\n"
+				"\r\n",
+				path.c_str(), query.c_str(), host.c_str(), port);
+		else if (!query.empty())
+			bytes = snprintf(tmp, sizeof(tmp),
+				"GET %s?%s HTTP/1.1\r\n"
+				"Host: %s\r\n"
+				"\r\n",
+				path.c_str(), query.c_str(), host.c_str());
+		else if (port)
+			bytes = snprintf(tmp, sizeof(tmp),
 				"GET %s HTTP/1.1\r\n"
 				"Host: %s:%d\r\n"
 				"\r\n",
 				path.c_str(), host.c_str(), port);
 		else
-			bytes = snprintf(header, sizeof(header),
+			bytes = snprintf(tmp, sizeof(tmp),
 				"GET %s HTTP/1.1\r\n"
 				"Host: %s\r\n"
 				"\r\n",
 				path.c_str(), host.c_str());
-		CHECK(bytes > 0 && bytes <= (int)sizeof(header));
-		ccf::tcp::send s(ret, sock, header, bytes);
+		CHECK(bytes > 0 && bytes <= (int)sizeof(tmp));
+		ccf::tcp::send s(ret, sock, tmp, bytes);
 		await(s);
 		if (ret != tcp::success)
 		{
+			this->len = 0;
 			this->ret = err_send_request;
 			if (this->errmsg)
 				*this->errmsg = "Failed in http send header";
@@ -716,34 +850,36 @@ void get::run()
 	
 	/* recv */
 	{
-		char header[4096];
-		size_t bytes = sizeof(header);
-		ccf::tcp::recv_till rt(ret, sock, header, bytes, "\r\n\r\n", 4);
-		await(rt);
-		if (ret != tcp::success)
+		char tmp[4096];
+		size_t bytes;
+		
 		{
-			this->ret = err_recv_response;
-			if (this->errmsg)
-				*this->errmsg = "Failed in http recv header";
-			return;
+			bytes = sizeof(tmp);
+			ccf::tcp::recv_till rt(ret, sock, tmp, bytes, "\r\n\r\n", 4);
+			await(rt);
+			if (ret != tcp::success)
+			{
+				this->len = 0;
+				this->ret = err_recv_response;
+				if (this->errmsg)
+					*this->errmsg = "Failed in http recv header";
+				return;
+			}
 		}
 		
 		//TODO
-		header[bytes] = '\0';
-		printf("%s", header);
+		tmp[bytes] = '\0';
+		fprintf(stderr, "%s", tmp);
 		
 		//http response parse
-		std::set<header::field> needs;
 		int status_code;
 		std::string reason_phrase;
 		std::map<header::field, std::string> header_fields;
 		
-		needs.insert(header::ContentLength);
-		needs.insert(header::TransferEncoding);
-		
-		ret = http_rsp_parse(header, bytes, needs, status_code, reason_phrase, header_fields);
+		ret = http_rsp_parse(tmp, bytes, needs, status_code, reason_phrase, header_fields);
 		if (ret)
 		{
+			this->len = 0;
 			this->ret = err_response_header_parse;
 			if (this->errmsg)
 			{
@@ -778,18 +914,162 @@ void get::run()
 			return;
 		}
 		
-		if (!header_fields.count(header::ContentLength) && !header_fields.count(header::TransferEncoding))
+		//TODO
+		for (std::map<header::field, std::string>::const_iterator it = header_fields.begin(); it != header_fields.end(); it++)
+			fprintf(stderr, "%d -> \"%s\"\n", it->first, it->second.c_str());
+		
+		if (this->len == 0)
 		{
-			this->ret = err_response_header_parse;
+			this->ret = status_code;
 			if (this->errmsg)
-				*this->errmsg = "Missing \"Content-Length\"/\"Transfer-Encoding\"";
-			return;
+				*this->errmsg = header::check_status(status_code);
+			return; //ignore body
+		}
+		
+		if (header_fields.count(header::TransferEncoding)) //chunked
+		{
+			char *cur = reinterpret_cast<char *>(this->buf);
+			size_t recved = 0;
+			for (;;)
+			{
+				//chunk-size [ chunk-extension ] CRLF
+				bytes = sizeof(tmp);
+				ccf::tcp::recv_till rt(ret, sock, tmp, bytes, "\r\n", 2);
+				await(rt);
+				if (ret != tcp::success)
+				{
+					this->len = 0;
+					this->ret = err_recv_response;
+					if (this->errmsg)
+						*this->errmsg = "Failed in http recv body(chunked)";
+					return;
+				}
+				
+				size_t chunk_len;
+				ret = http_chunk_parse(tmp, bytes, chunk_len);
+				if (ret)
+				{
+					this->len = 0;
+					this->ret = err_response_body_parse;
+					if (this->errmsg)
+						*this->errmsg = "Illegal chunk";
+					return;
+				}
+				
+				if (chunk_len == 0)
+					break; //ignore the last CRLF
+				
+				//chunk-data
+				size_t recv_len = recved + chunk_len > this->len? this->len - recved: chunk_len;
+				
+				ccf::tcp::recv_till rt2(ret, sock, cur, recv_len);
+				await(rt2);
+				if (ret != tcp::success)
+				{
+					this->len = 0;
+					this->ret = err_recv_response;
+					if (this->errmsg)
+						*this->errmsg = "Failed in http recv body(chunked)";
+					return;
+				}
+				
+				cur += recv_len;
+				recved += recv_len;
+				
+				if (recv_len < chunk_len)
+				{
+					this->len = recved;
+					this->ret = err_response_body_too_long;
+					if (this->errmsg)
+						*this->errmsg = "Response body is too long";
+					return;
+				}
+				
+				//CRLF
+				char chunk_end[2];
+				recv_len = sizeof(chunk_end);
+				ccf::tcp::recv_till rt3(ret, sock, chunk_end, recv_len);
+				await(rt3);
+				if (ret != tcp::success)
+				{
+					this->len = 0;
+					this->ret = err_recv_response;
+					if (this->errmsg)
+						*this->errmsg = "Failed in http recv body(chunked)";
+					return;
+				}
+				
+				if (chunk_end[0] != '\r' || chunk_end[1] != '\n')
+				{
+					this->len = 0;
+					this->ret = err_response_body_parse;
+					if (this->errmsg)
+						*this->errmsg = "Illegal chunk";
+					return;
+				}
+			}
+			this->len = recved;
+			this->ret = status_code;
+			if (this->errmsg)
+				*this->errmsg = header::check_status(status_code);
+		}
+		else
+		{
+			std::map<header::field, std::string>::const_iterator it = header_fields.find(header::ContentLength);
+			if (it == header_fields.end())
+			{
+				this->len = 0;
+				this->ret = err_response_header_parse;
+				if (this->errmsg)
+					*this->errmsg = "Missing \"Content-Length\"/\"Transfer-Encoding\"";
+				return;
+			}
+			
+			size_t body_len = 0;
+			sscanf(it->second.c_str(), "%zu", &body_len);
+			
+			if (body_len == 0)
+			{
+				this->len = 0;
+				this->ret = status_code;
+				if (this->errmsg)
+					*this->errmsg = header::check_status(status_code);
+				return; //empty body
+			}
+			
+			if (this->len > body_len)
+				this->len = body_len;
+			
+			ccf::tcp::recv_till rt(ret, sock, this->buf, this->len);
+			await(rt);
+			if (ret != tcp::success)
+			{
+				this->len = 0;
+				this->ret = err_recv_response;
+				if (this->errmsg)
+					*this->errmsg = "Failed in http recv body";
+				return;
+			}
+			
+			if (this->len >= body_len)
+			{
+				this->ret = status_code;
+				if (this->errmsg)
+					*this->errmsg = header::check_status(status_code);
+			}
+			else
+			{
+				this->ret = err_response_body_too_long;
+				if (this->errmsg)
+					*this->errmsg = "Response body is too long";
+			}
 		}
 	}
 }
 
 void get::cancel()
 {
+	this->len = 0;
 	if (this->errmsg)
 		*this->errmsg = "It was canceled";
 }
