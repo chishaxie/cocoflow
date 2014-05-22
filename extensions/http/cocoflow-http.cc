@@ -12,6 +12,11 @@ namespace http {
 
 #if defined(_WIN32) || defined(_WIN64)
 # define snprintf _snprintf
+# define SIZE_T_DEC_FMT "%lu"
+# define SIZE_T_HEX_FMT "%lx"
+#else
+# define SIZE_T_DEC_FMT "%zu"
+# define SIZE_T_HEX_FMT "%zx"
 #endif
 
 /* url parse */
@@ -625,7 +630,7 @@ static int http_chunk_parse(const void *buf, size_t len,
 	if (i == bgn || i + 1 == len)
 		return -1;
 	
-	sscanf(&s[bgn], "%zx", &chunk_len);
+	sscanf(&s[bgn], SIZE_T_HEX_FMT, &chunk_len);
 	
 	return 0;
 }
@@ -1026,7 +1031,7 @@ void get::run()
 			}
 			
 			size_t body_len = 0;
-			sscanf(it->second.c_str(), "%zu", &body_len);
+			sscanf(it->second.c_str(), SIZE_T_DEC_FMT, &body_len);
 			
 			if (body_len == 0)
 			{
