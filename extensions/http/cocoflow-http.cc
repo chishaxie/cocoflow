@@ -659,6 +659,19 @@ const static header::field needs_array[] = {
 
 const static std::set<header::field> needs(needs_array, needs_array + sizeof(needs_array)/sizeof(needs_array[0]));
 
+#define GET_WITH_QUERY      "GET %s?%s HTTP/1.1\r\n"
+#define GET_WITHOUT_QUERY   "GET %s HTTP/1.1\r\n"
+#define POST_WITH_QUERY     "POST %s?%s HTTP/1.1\r\n"
+#define POST_WITHOUT_QUERY  "POST %s HTTP/1.1\r\n"
+#define HOST_WITH_PORT      "Host: %s:%d\r\n"
+#define HOST_WITHOUT_PORT   "Host: %s\r\n"
+#if defined(_WIN32) || defined(_WIN64)
+#define CONTENT_LENGTH      "Content-Length: %lu\r\n"
+#else
+#define CONTENT_LENGTH      "Content-Length: %zu\r\n"
+#endif
+#define CRLF                "\r\n"
+
 /* http::get */
 
 get::get(int &ret, const char **errmsg, const char *url, void *buf, size_t &len)
@@ -686,7 +699,7 @@ void get::run()
 	
 	/* dns resolve */
 	
-	bool is_ipv4;
+	bool is_ipv4 = true;
 	struct sockaddr_in ipv4;
 	struct sockaddr_in6 ipv6;
 	
@@ -709,27 +722,27 @@ void get::run()
 		
 		if (port && !query.empty())
 			bytes = snprintf(tmp, sizeof(tmp),
-				"GET %s?%s HTTP/1.1\r\n"
-				"Host: %s:%d\r\n"
-				"\r\n",
+				GET_WITH_QUERY
+				HOST_WITH_PORT
+				CRLF,
 				path.c_str(), query.c_str(), host.c_str(), port);
 		else if (!query.empty())
 			bytes = snprintf(tmp, sizeof(tmp),
-				"GET %s?%s HTTP/1.1\r\n"
-				"Host: %s\r\n"
-				"\r\n",
+				GET_WITH_QUERY
+				HOST_WITHOUT_PORT
+				CRLF,
 				path.c_str(), query.c_str(), host.c_str());
 		else if (port)
 			bytes = snprintf(tmp, sizeof(tmp),
-				"GET %s HTTP/1.1\r\n"
-				"Host: %s:%d\r\n"
-				"\r\n",
+				GET_WITHOUT_QUERY
+				HOST_WITH_PORT
+				CRLF,
 				path.c_str(), host.c_str(), port);
 		else
 			bytes = snprintf(tmp, sizeof(tmp),
-				"GET %s HTTP/1.1\r\n"
-				"Host: %s\r\n"
-				"\r\n",
+				GET_WITHOUT_QUERY
+				HOST_WITHOUT_PORT
+				CRLF,
 				path.c_str(), host.c_str());
 		CHECK(bytes > 0 && bytes <= (int)sizeof(tmp));
 		
@@ -759,6 +772,129 @@ void get::cancel()
 get::~get()
 {
 }
+
+/* http::post */
+
+post::post(int &ret, const char **errmsg, const char *url, const void *pbuf, size_t plen, void *buf, size_t &len)
+	: ret(ret), errmsg(errmsg), url(url), pbuf(pbuf), plen(plen), buf(buf), len(len)
+{
+	CHECK(this->url != NULL);
+	if (this->plen != 0)
+		CHECK(this->pbuf != NULL);
+	if (this->len != 0)
+		CHECK(this->buf != NULL);
+	this->ret = unfinished;
+	if (this->errmsg)
+		*this->errmsg = NULL;
+}
+
+void post::run()
+{
+	/* url parse */
+	
+	std::string host;
+	int port;
+	std::string path;
+	std::string query;
+	
+	if (__client<post>::__url_parse(this, host, port, path, query))
+		return;
+	
+	/* dns resolve */
+	
+	bool is_ipv4 = true;
+	struct sockaddr_in ipv4;
+	struct sockaddr_in6 ipv6;
+	
+	if (__client<post>::__dns_resolve(this, host, port, is_ipv4, ipv4, ipv6))
+		return;
+
+	/* connect */
+	
+	tcp::connected sock;
+	
+	if (__client<post>::__connect(this, is_ipv4, ipv4, ipv6, sock))
+		return;
+	
+	/* send */
+	{
+		int ret;
+		
+		char tmp[4096];
+		int bytes;
+		
+		if (port && !query.empty())
+			bytes = snprintf(tmp, sizeof(tmp),
+				POST_WITH_QUERY
+				HOST_WITH_PORT
+				CONTENT_LENGTH
+				CRLF,
+				path.c_str(), query.c_str(), host.c_str(), port, this->plen);
+		else if (!query.empty())
+			bytes = snprintf(tmp, sizeof(tmp),
+				POST_WITH_QUERY
+				HOST_WITHOUT_PORT
+				CONTENT_LENGTH
+				CRLF,
+				path.c_str(), query.c_str(), host.c_str(), this->plen);
+		else if (port)
+			bytes = snprintf(tmp, sizeof(tmp),
+				POST_WITHOUT_QUERY
+				HOST_WITH_PORT
+				CONTENT_LENGTH
+				CRLF,
+				path.c_str(), host.c_str(), port, this->plen);
+		else
+			bytes = snprintf(tmp, sizeof(tmp),
+				POST_WITHOUT_QUERY
+				HOST_WITHOUT_PORT
+				CONTENT_LENGTH
+				CRLF,
+				path.c_str(), host.c_str(), this->plen);
+		CHECK(bytes > 0 && bytes <= (int)sizeof(tmp));
+		
+		ccf::tcp::send s(ret, sock, tmp, bytes);
+		await(s);
+		if (ret != tcp::success)
+		{
+			this->len = 0;
+			this->ret = err_send_request;
+			if (this->errmsg)
+				*this->errmsg = "Failed in http send header";
+			return;
+		}
+		
+		if (this->plen > 0)
+		{
+			ccf::tcp::send s2(ret, sock, this->pbuf, this->plen);
+			await(s2);
+			if (ret != tcp::success)
+			{
+				this->len = 0;
+				this->ret = err_send_request;
+				if (this->errmsg)
+					*this->errmsg = "Failed in http send body";
+				return;
+			}
+		}
+	}
+	
+	/* recv */
+	(void)__client<post>::__recv(this, sock);
+}
+
+void post::cancel()
+{
+	this->len = 0;
+	if (this->errmsg)
+		*this->errmsg = "It was canceled";
+}
+
+post::~post()
+{
+}
+
+/* http::__client<get/post> */
 
 template<typename T>
 bool __client<T>::__url_parse

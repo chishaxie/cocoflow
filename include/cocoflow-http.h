@@ -78,6 +78,26 @@ private:
 	template<typename T> friend class __client;
 };
 
+class post : public event_task
+{
+public:
+	post(int &ret, const char **errmsg, const char *url, const void *pbuf, size_t plen, void *buf, size_t &len);
+	virtual ~post();
+private:
+	post(const post&);
+	post& operator=(const post&);
+	virtual void run();
+	virtual void cancel();
+	int &ret;
+	const char **errmsg;
+	const char *url;
+	const void *pbuf;
+	size_t plen;
+	void *buf;
+	size_t &len;
+	template<typename T> friend class __client;
+};
+
 } /* end of namespace http */
 
 } /* end of namespace ccf */
