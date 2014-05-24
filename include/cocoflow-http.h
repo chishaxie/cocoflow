@@ -75,6 +75,7 @@ private:
 	const char *url;
 	void *buf;
 	size_t &len;
+	template<typename T> friend class __client;
 };
 
 } /* end of namespace http */

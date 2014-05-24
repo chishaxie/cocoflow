@@ -635,6 +635,23 @@ static int http_chunk_parse(const void *buf, size_t len,
 	return 0;
 }
 
+/* client */
+
+template<typename T>
+class __client
+{
+public:
+	/* return true -> failed */
+	static inline bool __url_parse
+		(T *_this, std::string &host, int &port, std::string &path, std::string &query);
+	static inline bool __dns_resolve
+		(T *_this, const std::string &host, int port, bool &is_ipv4, struct sockaddr_in &ipv4, struct sockaddr_in6 &ipv6);
+	static inline bool __connect
+		(T *_this, bool is_ipv4, const struct sockaddr_in &ipv4, const struct sockaddr_in6 &ipv6, tcp::connected &sock);
+	static inline bool __recv
+		(T *_this, tcp::connected &sock);
+};
+
 const static header::field needs_array[] = {
 	header::ContentLength,
 	header::TransferEncoding
@@ -657,88 +674,15 @@ get::get(int &ret, const char **errmsg, const char *url, void *buf, size_t &len)
 
 void get::run()
 {
-	int ret;
-	const char *errmsg;
-	
 	/* url parse */
 	
-	std::string protocol;
-	std::string user;
-	std::string password;
 	std::string host;
 	int port;
 	std::string path;
 	std::string query;
-	std::string comment;
 	
-	ret = url_parse(this->url, protocol, user, password, host, port, path, query, comment);
-	if (ret)
-	{
-		this->len = 0;
-		this->ret = err_url_parse;
-		if (this->errmsg)
-		{
-			switch (ret)
-			{
-			case -1:
-				*this->errmsg = "Illegal character in protocol";
-				break;
-			case -2:
-				*this->errmsg = "Missing protocol";
-				break;
-			case -3:
-				*this->errmsg = "Missing \"//\"";
-				break;
-			case -4:
-			case -5:
-				*this->errmsg = "Illegal \":\"";
-				break;
-			case -6:
-				*this->errmsg = "Illegal \"@\"";
-				break;
-			case -7:
-				*this->errmsg = "Illegal character in host";
-				break;
-			case -8:
-				*this->errmsg = "Illegal character in port";
-				break;
-			case -9:
-				*this->errmsg = "Illegal value in port";
-				break;
-			default:
-				*this->errmsg = "Failed in url parse";
-				break;
-			}
-		}
+	if (__client<get>::__url_parse(this, host, port, path, query))
 		return;
-	}
-	
-	if (protocol != "http")
-	{
-		this->len = 0;
-		this->ret = err_url_parse;
-		if (this->errmsg)
-			*this->errmsg = "Only supported protocol \"http\"";
-		return;
-	}
-	
-	if (!user.empty() || !password.empty())
-	{
-		this->len = 0;
-		this->ret = err_url_parse;
-		if (this->errmsg)
-			*this->errmsg = "Unsupported user/password";
-		return;
-	}
-
-	if (host.empty())
-	{
-		this->len = 0;
-		this->ret = err_url_parse;
-		if (this->errmsg)
-			*this->errmsg = "Missing host";
-		return;
-	}
 	
 	/* dns resolve */
 	
@@ -746,76 +690,23 @@ void get::run()
 	struct sockaddr_in ipv4;
 	struct sockaddr_in6 ipv6;
 	
-	{
-		struct addrinfo *result;
-		struct addrinfo hints;
-		memset(&hints, 0, sizeof(hints));
-		hints.ai_family = AF_UNSPEC; //Allow IPv4 or IPv6
-		hints.ai_socktype = SOCK_STREAM;
-		hints.ai_protocol = IPPROTO_TCP;
-		getaddrinfo dns(ret, &result, &errmsg, host.c_str(), NULL, &hints);
-		await(dns);
-		if (ret)
-		{
-			this->len = 0;
-			this->ret = err_dns_resolve;
-			if (this->errmsg)
-			{
-				if (errmsg && errmsg[0] != '\0')
-					*this->errmsg = errmsg;
-				else
-					*this->errmsg = "Failed in dns resolve";
-			}
-			return;
-		}
-		
-		CHECK(result != NULL);
-		CHECK(result->ai_addr != NULL);
-		
-		if (result->ai_addr->sa_family == AF_INET)
-		{
-			is_ipv4 = true;
-			ipv4 = *reinterpret_cast<struct sockaddr_in *>(result->ai_addr);
-			ipv4.sin_port = htons(port? port: HTTP_DEFAULT_PORT);
-		}
-		else if (result->ai_addr->sa_family == AF_INET6)
-		{
-			is_ipv4 = false;
-			ipv6 = *reinterpret_cast<struct sockaddr_in6 *>(result->ai_addr);
-			ipv6.sin6_port = htons(port? port: HTTP_DEFAULT_PORT);
-		}
-		else
-			CHECK(0);
-		
-		getaddrinfo::freeaddrinfo(result);
-	}
+	if (__client<get>::__dns_resolve(this, host, port, is_ipv4, ipv4, ipv6))
+		return;
 
 	/* connect */
 	
 	tcp::connected sock;
-	if (is_ipv4)
-	{
-		tcp::connect conn(ret, sock, ipv4);
-		await(conn);
-	}
-	else
-	{
-		tcp::connect conn(ret, sock, ipv6);
-		await(conn);
-	}
-	if (ret != tcp::success)
-	{
-		this->len = 0;
-		this->ret = err_tcp_connect;
-		if (this->errmsg)
-			*this->errmsg = "Failed in tcp connect";
+	
+	if (__client<get>::__connect(this, is_ipv4, ipv4, ipv6, sock))
 		return;
-	}
 	
 	/* send */
 	{
+		int ret;
+		
 		char tmp[4096];
 		int bytes;
+		
 		if (port && !query.empty())
 			bytes = snprintf(tmp, sizeof(tmp),
 				"GET %s?%s HTTP/1.1\r\n"
@@ -841,6 +732,7 @@ void get::run()
 				"\r\n",
 				path.c_str(), host.c_str());
 		CHECK(bytes > 0 && bytes <= (int)sizeof(tmp));
+		
 		ccf::tcp::send s(ret, sock, tmp, bytes);
 		await(s);
 		if (ret != tcp::success)
@@ -854,222 +746,7 @@ void get::run()
 	}
 	
 	/* recv */
-	{
-		char tmp[4096];
-		size_t bytes;
-		
-		{
-			bytes = sizeof(tmp);
-			ccf::tcp::recv_till rt(ret, sock, tmp, bytes, "\r\n\r\n", 4);
-			await(rt);
-			if (ret != tcp::success)
-			{
-				this->len = 0;
-				this->ret = err_recv_response;
-				if (this->errmsg)
-					*this->errmsg = "Failed in http recv header";
-				return;
-			}
-		}
-		
-		//TODO
-		tmp[bytes] = '\0';
-		fprintf(stderr, "%s", tmp);
-		
-		//http response parse
-		int status_code;
-		std::string reason_phrase;
-		std::map<header::field, std::string> header_fields;
-		
-		ret = http_rsp_parse(tmp, bytes, needs, status_code, reason_phrase, header_fields);
-		if (ret)
-		{
-			this->len = 0;
-			this->ret = err_response_header_parse;
-			if (this->errmsg)
-			{
-				switch (ret)
-				{
-				case -1:
-					*this->errmsg = "Illegal http version";
-					break;
-				case -2:
-					*this->errmsg = "Illegal status code";
-					break;
-				case -3:
-					*this->errmsg = "Illegal reason phrase";
-					break;
-				case -4:
-					*this->errmsg = "Illegal header end";
-					break;
-				case -5:
-					*this->errmsg = "Illegal field key";
-					break;
-				case -6:
-					*this->errmsg = "Illegal field value";
-					break;
-				case -7:
-					*this->errmsg = "Duplicate field";
-					break;
-				default:
-					*this->errmsg = "Failed in http response parse";
-					break;
-				}
-			}
-			return;
-		}
-		
-		//TODO
-		for (std::map<header::field, std::string>::const_iterator it = header_fields.begin(); it != header_fields.end(); it++)
-			fprintf(stderr, "%d -> \"%s\"\n", it->first, it->second.c_str());
-		
-		if (this->len == 0)
-		{
-			this->ret = status_code;
-			if (this->errmsg)
-				*this->errmsg = header::check_status(status_code);
-			return; //ignore body
-		}
-		
-		if (header_fields.count(header::TransferEncoding)) //chunked
-		{
-			char *cur = reinterpret_cast<char *>(this->buf);
-			size_t recved = 0;
-			for (;;)
-			{
-				//chunk-size [ chunk-extension ] CRLF
-				bytes = sizeof(tmp);
-				ccf::tcp::recv_till rt(ret, sock, tmp, bytes, "\r\n", 2);
-				await(rt);
-				if (ret != tcp::success)
-				{
-					this->len = 0;
-					this->ret = err_recv_response;
-					if (this->errmsg)
-						*this->errmsg = "Failed in http recv body(chunked)";
-					return;
-				}
-				
-				size_t chunk_len;
-				ret = http_chunk_parse(tmp, bytes, chunk_len);
-				if (ret)
-				{
-					this->len = 0;
-					this->ret = err_response_body_parse;
-					if (this->errmsg)
-						*this->errmsg = "Illegal chunk";
-					return;
-				}
-				
-				if (chunk_len == 0)
-					break; //ignore the last CRLF
-				
-				//chunk-data
-				size_t recv_len = recved + chunk_len > this->len? this->len - recved: chunk_len;
-				
-				ccf::tcp::recv_till rt2(ret, sock, cur, recv_len);
-				await(rt2);
-				if (ret != tcp::success)
-				{
-					this->len = 0;
-					this->ret = err_recv_response;
-					if (this->errmsg)
-						*this->errmsg = "Failed in http recv body(chunked)";
-					return;
-				}
-				
-				cur += recv_len;
-				recved += recv_len;
-				
-				if (recv_len < chunk_len)
-				{
-					this->len = recved;
-					this->ret = err_response_body_too_long;
-					if (this->errmsg)
-						*this->errmsg = "Response body is too long";
-					return;
-				}
-				
-				//CRLF
-				char chunk_end[2];
-				recv_len = sizeof(chunk_end);
-				ccf::tcp::recv_till rt3(ret, sock, chunk_end, recv_len);
-				await(rt3);
-				if (ret != tcp::success)
-				{
-					this->len = 0;
-					this->ret = err_recv_response;
-					if (this->errmsg)
-						*this->errmsg = "Failed in http recv body(chunked)";
-					return;
-				}
-				
-				if (chunk_end[0] != '\r' || chunk_end[1] != '\n')
-				{
-					this->len = 0;
-					this->ret = err_response_body_parse;
-					if (this->errmsg)
-						*this->errmsg = "Illegal chunk";
-					return;
-				}
-			}
-			this->len = recved;
-			this->ret = status_code;
-			if (this->errmsg)
-				*this->errmsg = header::check_status(status_code);
-		}
-		else
-		{
-			std::map<header::field, std::string>::const_iterator it = header_fields.find(header::ContentLength);
-			if (it == header_fields.end())
-			{
-				this->len = 0;
-				this->ret = err_response_header_parse;
-				if (this->errmsg)
-					*this->errmsg = "Missing \"Content-Length\"/\"Transfer-Encoding\"";
-				return;
-			}
-			
-			size_t body_len = 0;
-			sscanf(it->second.c_str(), SIZE_T_DEC_FMT, &body_len);
-			
-			if (body_len == 0)
-			{
-				this->len = 0;
-				this->ret = status_code;
-				if (this->errmsg)
-					*this->errmsg = header::check_status(status_code);
-				return; //empty body
-			}
-			
-			if (this->len > body_len)
-				this->len = body_len;
-			
-			ccf::tcp::recv_till rt(ret, sock, this->buf, this->len);
-			await(rt);
-			if (ret != tcp::success)
-			{
-				this->len = 0;
-				this->ret = err_recv_response;
-				if (this->errmsg)
-					*this->errmsg = "Failed in http recv body";
-				return;
-			}
-			
-			if (this->len >= body_len)
-			{
-				this->ret = status_code;
-				if (this->errmsg)
-					*this->errmsg = header::check_status(status_code);
-			}
-			else
-			{
-				this->ret = err_response_body_too_long;
-				if (this->errmsg)
-					*this->errmsg = "Response body is too long";
-			}
-		}
-	}
+	(void)__client<get>::__recv(this, sock);
 }
 
 void get::cancel()
@@ -1081,6 +758,383 @@ void get::cancel()
 
 get::~get()
 {
+}
+
+template<typename T>
+bool __client<T>::__url_parse
+	(T *_this, std::string &host, int &port, std::string &path, std::string &query)
+{
+	int ret;
+	
+	std::string protocol;
+	std::string user;
+	std::string password;
+	std::string comment;
+	
+	ret = url_parse(_this->url, protocol, user, password, host, port, path, query, comment);
+	if (ret)
+	{
+		_this->len = 0;
+		_this->ret = err_url_parse;
+		if (_this->errmsg)
+		{
+			switch (ret)
+			{
+			case -1:
+				*_this->errmsg = "Illegal character in protocol";
+				break;
+			case -2:
+				*_this->errmsg = "Missing protocol";
+				break;
+			case -3:
+				*_this->errmsg = "Missing \"//\"";
+				break;
+			case -4:
+			case -5:
+				*_this->errmsg = "Illegal \":\"";
+				break;
+			case -6:
+				*_this->errmsg = "Illegal \"@\"";
+				break;
+			case -7:
+				*_this->errmsg = "Illegal character in host";
+				break;
+			case -8:
+				*_this->errmsg = "Illegal character in port";
+				break;
+			case -9:
+				*_this->errmsg = "Illegal value in port";
+				break;
+			default:
+				*_this->errmsg = "Failed in url parse";
+				break;
+			}
+		}
+		return true;
+	}
+	
+	if (protocol != "http")
+	{
+		_this->len = 0;
+		_this->ret = err_url_parse;
+		if (_this->errmsg)
+			*_this->errmsg = "Only supported protocol \"http\"";
+		return true;
+	}
+	
+	if (!user.empty() || !password.empty())
+	{
+		_this->len = 0;
+		_this->ret = err_url_parse;
+		if (_this->errmsg)
+			*_this->errmsg = "Unsupported user/password";
+		return true;
+	}
+
+	if (host.empty())
+	{
+		_this->len = 0;
+		_this->ret = err_url_parse;
+		if (_this->errmsg)
+			*_this->errmsg = "Missing host";
+		return true;
+	}
+	
+	return false;
+}
+
+template<typename T>
+bool __client<T>::__dns_resolve
+	(T *_this, const std::string &host, int port, bool &is_ipv4, struct sockaddr_in &ipv4, struct sockaddr_in6 &ipv6)
+{
+	int ret;
+	const char *errmsg;
+	
+	struct addrinfo *result;
+	struct addrinfo hints;
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_UNSPEC; //Allow IPv4 or IPv6
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_protocol = IPPROTO_TCP;
+	
+	getaddrinfo dns(ret, &result, &errmsg, host.c_str(), NULL, &hints);
+	await(dns);
+	if (ret)
+	{
+		_this->len = 0;
+		_this->ret = err_dns_resolve;
+		if (_this->errmsg)
+		{
+			if (errmsg && errmsg[0] != '\0')
+				*_this->errmsg = errmsg;
+			else
+				*_this->errmsg = "Failed in dns resolve";
+		}
+		return true;
+	}
+	
+	CHECK(result != NULL);
+	CHECK(result->ai_addr != NULL);
+	
+	if (result->ai_addr->sa_family == AF_INET)
+	{
+		is_ipv4 = true;
+		ipv4 = *reinterpret_cast<struct sockaddr_in *>(result->ai_addr);
+		ipv4.sin_port = htons(port? port: HTTP_DEFAULT_PORT);
+	}
+	else if (result->ai_addr->sa_family == AF_INET6)
+	{
+		is_ipv4 = false;
+		ipv6 = *reinterpret_cast<struct sockaddr_in6 *>(result->ai_addr);
+		ipv6.sin6_port = htons(port? port: HTTP_DEFAULT_PORT);
+	}
+	else
+		CHECK(0);
+	
+	getaddrinfo::freeaddrinfo(result);
+	
+	return false;
+}
+
+template<typename T>
+bool __client<T>::__connect
+	(T *_this, bool is_ipv4, const struct sockaddr_in &ipv4, const struct sockaddr_in6 &ipv6, tcp::connected &sock)
+{
+	int ret;
+	
+	if (is_ipv4)
+	{
+		tcp::connect conn(ret, sock, ipv4);
+		await(conn);
+	}
+	else
+	{
+		tcp::connect conn(ret, sock, ipv6);
+		await(conn);
+	}
+	if (ret != tcp::success)
+	{
+		_this->len = 0;
+		_this->ret = err_tcp_connect;
+		if (_this->errmsg)
+			*_this->errmsg = "Failed in tcp connect";
+		return true;
+	}
+	
+	return false;
+}
+
+template<typename T>
+bool __client<T>::__recv
+	(T *_this, tcp::connected &sock)
+{
+	int ret;
+	
+	char tmp[4096];
+	size_t bytes;
+	
+	//recv http response header
+	{
+		bytes = sizeof(tmp);
+		ccf::tcp::recv_till rt(ret, sock, tmp, bytes, "\r\n\r\n", 4);
+		await(rt);
+		if (ret != tcp::success)
+		{
+			_this->len = 0;
+			_this->ret = err_recv_response;
+			if (_this->errmsg)
+				*_this->errmsg = "Failed in http recv header";
+			return true;
+		}
+	}
+	
+	//TODO
+	tmp[bytes] = '\0';
+	fprintf(stderr, "%s", tmp);
+	
+	//http response parse
+	int status_code;
+	std::string reason_phrase;
+	std::map<header::field, std::string> header_fields;
+	
+	ret = http_rsp_parse(tmp, bytes, needs, status_code, reason_phrase, header_fields);
+	if (ret)
+	{
+		_this->len = 0;
+		_this->ret = err_response_header_parse;
+		if (_this->errmsg)
+		{
+			switch (ret)
+			{
+			case -1:
+				*_this->errmsg = "Illegal http version";
+				break;
+			case -2:
+				*_this->errmsg = "Illegal status code";
+				break;
+			case -3:
+				*_this->errmsg = "Illegal reason phrase";
+				break;
+			case -4:
+				*_this->errmsg = "Illegal header end";
+				break;
+			case -5:
+				*_this->errmsg = "Illegal field key";
+				break;
+			case -6:
+				*_this->errmsg = "Illegal field value";
+				break;
+			case -7:
+				*_this->errmsg = "Duplicate field";
+				break;
+			default:
+				*_this->errmsg = "Failed in http response parse";
+				break;
+			}
+		}
+		return true;
+	}
+	
+	//TODO
+	for (std::map<header::field, std::string>::const_iterator it = header_fields.begin(); it != header_fields.end(); it++)
+		fprintf(stderr, "%d -> \"%s\"\n", it->first, it->second.c_str());
+	
+	if (_this->len == 0) //ignore body
+		;
+	else if (header_fields.count(header::TransferEncoding)) //chunked
+	{
+		char *cur = reinterpret_cast<char *>(_this->buf);
+		size_t recved = 0;
+		
+		for (;;)
+		{
+			//chunk-size [ chunk-extension ] CRLF
+			bytes = sizeof(tmp);
+			ccf::tcp::recv_till rt(ret, sock, tmp, bytes, "\r\n", 2);
+			await(rt);
+			if (ret != tcp::success)
+			{
+				_this->len = 0;
+				_this->ret = err_recv_response;
+				if (_this->errmsg)
+					*_this->errmsg = "Failed in http recv body(chunked)";
+				return true;
+			}
+			
+			size_t chunk_len;
+			ret = http_chunk_parse(tmp, bytes, chunk_len);
+			if (ret)
+			{
+				_this->len = 0;
+				_this->ret = err_response_body_parse;
+				if (_this->errmsg)
+					*_this->errmsg = "Illegal chunk";
+				return true;
+			}
+			
+			if (chunk_len == 0)
+				break; //ignore the last CRLF
+			
+			//chunk-data
+			size_t recv_len = recved + chunk_len > _this->len? _this->len - recved: chunk_len;
+			
+			ccf::tcp::recv_till rt2(ret, sock, cur, recv_len);
+			await(rt2);
+			if (ret != tcp::success)
+			{
+				_this->len = 0;
+				_this->ret = err_recv_response;
+				if (_this->errmsg)
+					*_this->errmsg = "Failed in http recv body(chunked)";
+				return true;
+			}
+			
+			cur += recv_len;
+			recved += recv_len;
+			
+			if (recv_len < chunk_len)
+			{
+				_this->len = recved;
+				_this->ret = err_response_body_too_long;
+				if (_this->errmsg)
+					*_this->errmsg = "Response body is too long";
+				return true;
+			}
+			
+			//CRLF
+			char chunk_end[2];
+			recv_len = sizeof(chunk_end);
+			ccf::tcp::recv_till rt3(ret, sock, chunk_end, recv_len);
+			await(rt3);
+			if (ret != tcp::success)
+			{
+				_this->len = 0;
+				_this->ret = err_recv_response;
+				if (_this->errmsg)
+					*_this->errmsg = "Failed in http recv body(chunked)";
+				return true;
+			}
+			
+			if (chunk_end[0] != '\r' || chunk_end[1] != '\n')
+			{
+				_this->len = 0;
+				_this->ret = err_response_body_parse;
+				if (_this->errmsg)
+					*_this->errmsg = "Illegal chunk";
+				return true;
+			}
+		}
+		
+		_this->len = recved;
+	}
+	else
+	{
+		std::map<header::field, std::string>::const_iterator it = header_fields.find(header::ContentLength);
+		if (it == header_fields.end())
+		{
+			_this->len = 0;
+			_this->ret = err_response_header_parse;
+			if (_this->errmsg)
+				*_this->errmsg = "Missing \"Content-Length\"/\"Transfer-Encoding\"";
+			return true;
+		}
+		
+		size_t body_len = 0;
+		sscanf(it->second.c_str(), SIZE_T_DEC_FMT, &body_len);
+		
+		if (body_len > 0)
+		{
+			if (_this->len > body_len)
+				_this->len = body_len;
+			
+			ccf::tcp::recv_till rt(ret, sock, _this->buf, _this->len);
+			await(rt);
+			if (ret != tcp::success)
+			{
+				_this->len = 0;
+				_this->ret = err_recv_response;
+				if (_this->errmsg)
+					*_this->errmsg = "Failed in http recv body";
+				return true;
+			}
+			
+			if (_this->len < body_len)
+			{
+				_this->ret = err_response_body_too_long;
+				if (_this->errmsg)
+					*_this->errmsg = "Response body is too long";
+				return true;
+			}
+		}
+		else //empty body
+			_this->len = 0;
+	}
+	
+	_this->ret = status_code;
+	if (_this->errmsg)
+		*_this->errmsg = header::check_status(status_code);
+	
+	return false;
 }
 
 }
