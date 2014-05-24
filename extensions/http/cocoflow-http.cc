@@ -3,6 +3,10 @@
 
 #include <algorithm>
 
+#if defined(_MSC_VER)
+	#pragma warning(disable:4748)
+#endif
+
 namespace ccf {
 
 namespace http {
@@ -1084,9 +1088,9 @@ bool __client<T>::__recv
 		}
 	}
 	
-	//TODO
-	tmp[bytes] = '\0';
-	fprintf(stderr, "%s", tmp);
+	//Debug
+	//tmp[bytes] = '\0';
+	//fprintf(stderr, "%s", tmp);
 	
 	//http response parse
 	int status_code;
@@ -1131,9 +1135,9 @@ bool __client<T>::__recv
 		return true;
 	}
 	
-	//TODO
-	for (std::map<header::field, std::string>::const_iterator it = header_fields.begin(); it != header_fields.end(); it++)
-		fprintf(stderr, "%d -> \"%s\"\n", it->first, it->second.c_str());
+	//Debug
+	//for (std::map<header::field, std::string>::const_iterator it = header_fields.begin(); it != header_fields.end(); it++)
+	//	fprintf(stderr, "%d -> \"%s\"\n", it->first, it->second.c_str());
 	
 	if (_this->len == 0) //ignore body
 		;

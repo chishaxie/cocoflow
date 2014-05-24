@@ -5,6 +5,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libccf-http", "libccf-http.
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_http_get", "test_http_get.vcproj", "{4CC4CC31-9D25-4173-BA60-EA5073951C83}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_http_post", "test_http_post.vcproj", "{4CC4CC31-9D25-4173-BA60-EA5073951C84}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -29,6 +31,14 @@ Global
 		{4CC4CC31-9D25-4173-BA60-EA5073951C83}.Release|Win32.Build.0 = Release|Win32
 		{4CC4CC31-9D25-4173-BA60-EA5073951C83}.Release|Win64.ActiveCfg = Release|x64
 		{4CC4CC31-9D25-4173-BA60-EA5073951C83}.Release|Win64.Build.0 = Release|x64
+		{4CC4CC31-9D25-4173-BA60-EA5073951C84}.Debug|Win32.ActiveCfg = Debug|Win32
+		{4CC4CC31-9D25-4173-BA60-EA5073951C84}.Debug|Win32.Build.0 = Debug|Win32
+		{4CC4CC31-9D25-4173-BA60-EA5073951C84}.Debug|Win64.ActiveCfg = Debug|x64
+		{4CC4CC31-9D25-4173-BA60-EA5073951C84}.Debug|Win64.Build.0 = Debug|x64
+		{4CC4CC31-9D25-4173-BA60-EA5073951C84}.Release|Win32.ActiveCfg = Release|Win32
+		{4CC4CC31-9D25-4173-BA60-EA5073951C84}.Release|Win32.Build.0 = Release|Win32
+		{4CC4CC31-9D25-4173-BA60-EA5073951C84}.Release|Win64.ActiveCfg = Release|x64
+		{4CC4CC31-9D25-4173-BA60-EA5073951C84}.Release|Win64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

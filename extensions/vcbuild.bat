@@ -55,8 +55,8 @@ xcopy /Y vc\%CCF_LIB_PATH%Debug\libccf-http.lib ..\lib\Debug\ > nul
 xcopy /Y vc\%CCF_LIB_PATH%Release\libccf-http.lib ..\lib\Release\ > nul
 
 echo Compiling test ...
-msbuild vc\cocoflow-extensions.sln /t:test_http_get /p:Configuration=Debug /p:Platform="%CCF_MS_PLATFORM%" /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
-msbuild vc\cocoflow-extensions.sln /t:test_http_get /p:Configuration=Release /p:Platform="%CCF_MS_PLATFORM%" /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
+msbuild vc\cocoflow-extensions.sln /t:test_http_get,test_http_post /p:Configuration=Debug /p:Platform="%CCF_MS_PLATFORM%" /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
+msbuild vc\cocoflow-extensions.sln /t:test_http_get,test_http_post /p:Configuration=Release /p:Platform="%CCF_MS_PLATFORM%" /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
 
 :exit
 pause
